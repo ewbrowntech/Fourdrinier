@@ -6,3 +6,4 @@ storage
 *.sqlite3
 node_modules
 yarn-error.log
+backend/docs/openapi.json

@@ -29,4 +29,6 @@
     "python.analysis.extraPaths": [
         "${workspaceFolder}/backend/app/db/models"
     ],
+    "chatgpt.openOnStartup": true,
+    "chatgpt.commentCodeLensEnabled": false,
 }
