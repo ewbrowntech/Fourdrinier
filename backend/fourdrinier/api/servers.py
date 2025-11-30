@@ -22,13 +22,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.fourdrinier.db import crud
-from backend.fourdrinier.db.models import Server
-from backend.fourdrinier.db.schema import ServerCreate
-from backend.fourdrinier.db.schema import ServerResponse
-from backend.fourdrinier.db.session import get_db
-from backend.fourdrinier.dependencies.deploy.start_container import start_container
-from backend.fourdrinier.dependencies.deploy.start_container import stop_container
+from fourdrinier.db import crud
+from fourdrinier.db.models import Server
+from fourdrinier.db.schema import ServerCreate
+from fourdrinier.db.schema import ServerResponse
+from fourdrinier.db.session import get_db
+from fourdrinier.dependencies.deploy.start_container import start_container
+from fourdrinier.dependencies.deploy.start_container import stop_container
 
 
 router = APIRouter()

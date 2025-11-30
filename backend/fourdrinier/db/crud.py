@@ -18,9 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.fourdrinier.core.utils import generate_id
-from backend.fourdrinier.db.models import Server
-from backend.fourdrinier.db.schema import ServerCreate
+from fourdrinier.core.utils import generate_id
+from fourdrinier.db.models import Server
+from fourdrinier.db.schema import ServerCreate
 
 
 async def list_servers(db: AsyncSession) -> list[Server]:

@@ -14,7 +14,7 @@ from httpx import AsyncClient
 from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.fourdrinier.db.models import Server
+from fourdrinier.db.models import Server
 
 
 async def test_list_servers_000_nominal_no_servers(

@@ -16,8 +16,8 @@ from typing import Dict
 
 from fastapi import FastAPI
 
-from backend.fourdrinier.api.servers import router as servers_router
-from backend.fourdrinier.core.config import PROJECT_NAME
+from fourdrinier.api.servers import router as servers_router
+from fourdrinier.core.config import PROJECT_NAME
 
 
 # Initialize the FastAPI application object

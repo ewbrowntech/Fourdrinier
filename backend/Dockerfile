@@ -47,7 +47,7 @@ COPY --from=builder /fd/.venv ${POETRY_VENV}
 EXPOSE 8000
 
 # Run the FastAPI server
-CMD python3 -m alembic upgrade head && python -m uvicorn backend.fourdrinier.main:app --host 0.0.0.0 --port 8000
+CMD python3 -m alembic upgrade head && python -m uvicorn fourdrinier.main:app --host 0.0.0.0 --port 8000
 
 ####################################################################################################
 # Test Image Builder
@@ -83,4 +83,4 @@ COPY ./test/.coveragerc /fd/
 EXPOSE 8000
 
 # Run the FastAPI server
-CMD python3 -m alembic upgrade head && python -m uvicorn backend.fourdrinier.main:app --reload --host 0.0.0.0 --port 8000
+CMD python3 -m alembic upgrade head && python -m uvicorn fourdrinier.main:app --reload --host 0.0.0.0 --port 8000

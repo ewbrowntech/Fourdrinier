@@ -10,6 +10,11 @@ All rights reserved. This file is part of the Fourdrinier project and is release
 the GPLv3 License. See the LICENSE file for more details.
 """
 
+import os
+
+
+os.environ["DB_URL"] = "sqlite+aiosqlite:///./test.db"
+
 from typing import AsyncGenerator
 
 import pytest
@@ -20,10 +25,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
-from backend.fourdrinier.core.config import DB_URL
-from backend.fourdrinier.db.models import Base
-from backend.fourdrinier.db.session import get_db
-from backend.fourdrinier.main import app
+from fourdrinier.core.config import DB_URL
+from fourdrinier.db.models import Base
+from fourdrinier.db.session import get_db
+from fourdrinier.main import app
 
 
 @pytest.fixture()

@@ -15,7 +15,7 @@ ALEMBIC_TAG ?= "initial revision"
 
 # Build the backend
 build-backend:
-	@echo "Building the backend..."
+	@echo "Building the .."
 	@docker compose $(PRODUCTION_CONFIG) build backend
 
 build-backend-test:

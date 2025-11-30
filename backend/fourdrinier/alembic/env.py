@@ -8,8 +8,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy.sql.schema import MetaData
 
-from backend.fourdrinier.core.config import DB_URL
-from backend.fourdrinier.db.models import Base
+from fourdrinier.core.config import DB_URL
+from fourdrinier.db.models import Base
 
 
 # this is the Alembic Config object, which provides

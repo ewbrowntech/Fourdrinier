@@ -19,7 +19,7 @@ from sqlalchemy import Result
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.fourdrinier.db.models import Server
+from fourdrinier.db.models import Server
 
 
 async def test_create_server_000_nominal(client: AsyncClient, test_db: AsyncSession) -> None:
