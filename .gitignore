@@ -7,3 +7,4 @@ storage
 node_modules
 yarn-error.log
 backend/docs/openapi.json
+.k8s/

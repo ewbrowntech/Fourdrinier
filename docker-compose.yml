@@ -1,96 +1,97 @@
 #########################################################
 # Bases
 #########################################################
-x-backend_base: &backend-base
+x-app-base: &app-base
   build:
-    context: ./backend
+    context: .
     dockerfile: Dockerfile
-  image: fourdrinier-backend
+  image: fourdrinier
   environment:
-    DOCKER_HOST: $DOCKER_HOST_OVERRIDE
-    STORAGE_PATH: $STORAGE_PATH
-  ports:
-    - "8000:8000"
+    K8S_API_HOST: ${K8S_API_HOST:-https://host.docker.internal:6443}
+    K8S_TOKEN_PATH: /var/run/secrets/kubernetes.io/serviceaccount/token
+    K8S_CA_CERT_PATH: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    K8S_NAMESPACE: minecraft
+    MINECRAFT_IMAGE: ${MINECRAFT_IMAGE:-itzg/minecraft-server:java17-alpine}
+    MINECRAFT_PVC_SIZE: ${MINECRAFT_PVC_SIZE:-5Gi}
+    MINECRAFT_STORAGE_CLASS: ${MINECRAFT_STORAGE_CLASS:-local-path}
   networks:
     - fourdrinier-network
-    - bridge-network
-
-x-frontend-base: &frontend-base
-  image: fourdrinier-frontend
-  ports:
-    - "3000:3000"
-  environment:
-    BACKEND_HOST: backend
-    BACKEND_PORT: 8000
-  networks:
-    - fourdrinier-network
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
 
 services:
   #########################################################
-  # Backend
+  # Production (Monolithic: Backend serves Frontend)
   #########################################################
-  backend:
-    <<: *backend-base
+  app:
+    <<: *app-base
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
       target: prod
+    ports:
+      - "8000:8000"
     volumes:
       - ./tmp:/fd/db-data
       - ./ssh:/root/.ssh
-      - /var/run/docker.sock:/var/run/docker.sock
-      - $STORAGE_PATH:/storage
-      - ./backend/fourdrinier:/fd/backend/fourdrinier
+      - ./.k8s/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro
+      - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro
     profiles: [production]
 
-  backend_test:
-    <<: *backend-base
+  #########################################################
+  # Testing
+  #########################################################
+  app_test:
+    <<: *app-base
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
       target: test
+    ports:
+      - "8000:8000"
     volumes:
       - test-data:/fd/db-data
       - ./ssh:/root/.ssh
-      - /var/run/docker.sock:/var/run/docker.sock
-      - $STORAGE_PATH:/storage
-
+      - ./.k8s/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro
+      - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro
     profiles: [testing]
 
+  #########################################################
+  # Debug/Development (Hot Reloading - Separate Services)
+  #########################################################
   backend_debug:
-    <<: *backend-base
+    <<: *app-base
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-      target: test
+      target: backend-debug
+    ports:
+      - "8000:8000"
     volumes:
       - ./tmp:/fd/db-data
       - ./ssh:/root/.ssh
-      - /var/run/docker.sock:/var/run/docker.sock
-      - $STORAGE_PATH:/storage
+      - ./.k8s/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro
+      - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro
+      # Mount backend source code for hot reloading
       - ./backend/fourdrinier:/fd/backend/fourdrinier
     profiles: [debug]
 
-  #########################################################
-  # Frontend
-  #########################################################
-  frontend:
-    <<: *frontend-base
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: prod
-    profiles: [production]
-
   frontend_debug:
-    <<: *frontend-base
     build:
-      context: ./frontend
+      context: .
       dockerfile: Dockerfile
-      target: debug
+      target: frontend-debug
+    ports:
+      - "3000:3000"
     volumes:
-      - ./frontend/app:/app/app
-      - ./frontend/public:/app/public
+      # Mount frontend source code for hot reloading
+      - ./frontend:/app
+    environment:
+      VITE_API_URL: http://localhost:8000
+    networks:
+      - fourdrinier-network
+    depends_on:
+      - backend_debug
     profiles: [debug]
 
 volumes:
@@ -99,5 +100,3 @@ volumes:
 
 networks:
   fourdrinier-network:
-  bridge-network:
-    driver: bridge

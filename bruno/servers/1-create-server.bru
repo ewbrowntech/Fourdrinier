@@ -1,0 +1,50 @@
+meta {
+  name: 1. Create Server
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/servers/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "My Minecraft Server",
+    "loader": "paper",
+    "game_version": "1.20.1"
+  }
+}
+
+docs {
+  # Create Server
+
+  Creates a new Minecraft server entry in the database.
+  This does not start the server - it only creates the server record.
+
+  ## Request Body
+
+  - `name` (string, optional): The name of the server. Default: "My Server"
+  - `loader` (string, optional): The server loader type. Default: "paper"
+  - `game_version` (string, required): Minecraft version in format X.Y.Z (e.g., "1.20.1")
+
+  ## Response
+
+  Returns the created server object with an auto-generated `id`.
+
+  ## Next Steps
+
+  After creating a server, copy the `id` from the response and:
+  1. Set it as the `serverId` environment variable
+  2. Use "Start Server" to launch the Minecraft server
+}
+
+script:post-response {
+  // Automatically save the server ID to environment
+  const response = res.getBody();
+  if (response && response.id) {
+    bru.setEnvVar("serverId", response.id);
+  }
+}

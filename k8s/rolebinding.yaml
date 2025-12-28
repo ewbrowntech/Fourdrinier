@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fourdrinier-backend-binding
+  namespace: minecraft
+subjects:
+  - kind: ServiceAccount
+    name: fourdrinier-backend
+    namespace: minecraft
+roleRef:
+  kind: Role
+  name: minecraft-manager
+  apiGroup: rbac.authorization.k8s.io

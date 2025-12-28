@@ -15,4 +15,22 @@ import os
 
 PROJECT_NAME = "fourdrinier"
 DB_URL: str = os.getenv("DB_URL", "sqlite+aiosqlite:///./db-data/fourdrinier.db")
-DOCKER_HOST: str | None = os.getenv("DOCKER_HOST", "/var/run/docker.sock")
+
+# Kubernetes configuration
+K8S_API_HOST: str = os.getenv("K8S_API_HOST", "https://127.0.0.1:6443")
+K8S_TOKEN_PATH: str = os.getenv(
+    "K8S_TOKEN_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token"
+)
+K8S_CA_CERT_PATH: str = os.getenv(
+    "K8S_CA_CERT_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+)
+K8S_NAMESPACE: str = os.getenv("K8S_NAMESPACE", "minecraft")
+
+# Minecraft server defaults
+MINECRAFT_IMAGE: str = os.getenv("MINECRAFT_IMAGE", "itzg/minecraft-server:java17-alpine")
+MINECRAFT_PVC_SIZE: str = os.getenv("MINECRAFT_PVC_SIZE", "5Gi")
+MINECRAFT_STORAGE_CLASS: str = os.getenv("MINECRAFT_STORAGE_CLASS", "local-path")
+MINECRAFT_CPU_REQUEST: str = os.getenv("MINECRAFT_CPU_REQUEST", "1000m")
+MINECRAFT_CPU_LIMIT: str = os.getenv("MINECRAFT_CPU_LIMIT", "2000m")
+MINECRAFT_MEMORY_REQUEST: str = os.getenv("MINECRAFT_MEMORY_REQUEST", "2Gi")
+MINECRAFT_MEMORY_LIMIT: str = os.getenv("MINECRAFT_MEMORY_LIMIT", "4Gi")

@@ -1,0 +1,25 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/health
+  body: none
+  auth: none
+}
+
+docs {
+  # Health Check
+
+  Verify that the API is running and responding to requests.
+
+  ## Expected Response
+
+  ```json
+  {
+    "status": "ok"
+  }
+  ```
+}

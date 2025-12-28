@@ -10,11 +10,6 @@ All rights reserved. This file is part of the Fourdrinier project and is release
 the GPLv3 License. See the LICENSE file for more details.
 """
 
-import os
-import shutil
-from pathlib import Path
-
-from docker.errors import NotFound
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -27,6 +22,7 @@ from fourdrinier.db.models import Server
 from fourdrinier.db.schema import ServerCreate
 from fourdrinier.db.schema import ServerResponse
 from fourdrinier.db.session import get_db
+from fourdrinier.dependencies.deploy.start_container import delete_server_resources
 from fourdrinier.dependencies.deploy.start_container import start_container
 from fourdrinier.dependencies.deploy.start_container import stop_container
 
@@ -67,19 +63,10 @@ async def get_server(server_id: str, db: AsyncSession = Depends(get_db)) -> Serv
 @router.delete("/{server_id}", status_code=200)
 async def delete_server(server_id: str, db: AsyncSession = Depends(get_db)) -> None:
     """
-    Get a server by ID
+    Delete a server and all its Kubernetes resources
     """
-    # Stop the server container
-    try:
-        image_name: str = f"fourdrinier-server-{server_id}"
-        await stop_container(image_name)
-    except NotFound:
-        pass
-
-    # Remove the server's storage directory
-    storage_path: Path = Path(f"/storage/{server_id}")
-    if storage_path.exists() and storage_path.is_dir():
-        shutil.rmtree(storage_path, ignore_errors=True)
+    # Delete Kubernetes resources (Pod, PVC, Service)
+    await delete_server_resources(server_id)
 
     # Remove the server from the database
     try:
@@ -93,37 +80,31 @@ async def delete_server(server_id: str, db: AsyncSession = Depends(get_db)) -> N
 @router.post("/{server_id}/start", status_code=201)
 async def start_server(server_id: str, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """
-    Start a server
+    Start a Minecraft server in Kubernetes
     """
     try:
         server: Server = await crud.get_server(db, server_id)
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    # Server storage path
-    storage_path: Path = Path(f"/storage/{server.id}")
-    storage_path.mkdir(exist_ok=True)
-    host_storage_path: str = f"{os.getenv('STORAGE_PATH')}/{server.id}"
+    # Start the server in Kubernetes
+    pod_name: str = await start_container(
+        server_name=server.name, server_id=server.id, game_version=server.game_version
+    )
 
-    # Start the server container'
-    image_name: str = f"fourdrinier-server-{server.id}"
-    container_id: str = await start_container(image_name, host_storage_path)
-
-    return JSONResponse(content={"container": {"id": container_id, "name": image_name}})
+    return JSONResponse(content={"pod": {"name": pod_name, "namespace": "minecraft"}})
 
 
 @router.put("/{server_id}/stop", status_code=200)
 async def stop_server(server_id: str, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """
-    Stop a server
+    Stop a Minecraft server
     """
     try:
         server: Server = await crud.get_server(db, server_id)
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    # Start the server container'
-    image_name: str = f"fourdrinier-server-{server.id}"
-    await stop_container(image_name)
+    await stop_container(server.id)
 
     return JSONResponse(content={"message": "Server stopped"})
