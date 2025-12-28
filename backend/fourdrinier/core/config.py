@@ -27,7 +27,7 @@ K8S_CA_CERT_PATH: str = os.getenv(
 K8S_NAMESPACE: str = os.getenv("K8S_NAMESPACE", "minecraft")
 
 # Minecraft server defaults
-MINECRAFT_IMAGE: str = os.getenv("MINECRAFT_IMAGE", "itzg/minecraft-server:java17-alpine")
+MINECRAFT_IMAGE: str = os.getenv("MINECRAFT_IMAGE", "itzg/minecraft-server:java21-alpine")
 MINECRAFT_PVC_SIZE: str = os.getenv("MINECRAFT_PVC_SIZE", "5Gi")
 MINECRAFT_STORAGE_CLASS: str = os.getenv("MINECRAFT_STORAGE_CLASS", "local-path")
 MINECRAFT_CPU_REQUEST: str = os.getenv("MINECRAFT_CPU_REQUEST", "1000m")

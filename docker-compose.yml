@@ -11,7 +11,7 @@ x-app-base: &app-base
     K8S_TOKEN_PATH: /var/run/secrets/kubernetes.io/serviceaccount/token
     K8S_CA_CERT_PATH: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
     K8S_NAMESPACE: minecraft
-    MINECRAFT_IMAGE: ${MINECRAFT_IMAGE:-itzg/minecraft-server:java17-alpine}
+    MINECRAFT_IMAGE: ${MINECRAFT_IMAGE:-itzg/minecraft-server:java21-alpine}
     MINECRAFT_PVC_SIZE: ${MINECRAFT_PVC_SIZE:-5Gi}
     MINECRAFT_STORAGE_CLASS: ${MINECRAFT_STORAGE_CLASS:-local-path}
   networks:
@@ -36,7 +36,7 @@ services:
       - ./ssh:/root/.ssh
       - ./.k8s/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro
       - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro
-    profiles: [production]
+    profiles: [ production ]
 
   #########################################################
   # Testing
@@ -54,7 +54,7 @@ services:
       - ./ssh:/root/.ssh
       - ./.k8s/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro
       - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro
-    profiles: [testing]
+    profiles: [ testing ]
 
   #########################################################
   # Debug/Development (Hot Reloading - Separate Services)
@@ -74,7 +74,7 @@ services:
       - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro
       # Mount backend source code for hot reloading
       - ./backend/fourdrinier:/fd/backend/fourdrinier
-    profiles: [debug]
+    profiles: [ debug ]
 
   frontend_debug:
     build:
@@ -82,7 +82,7 @@ services:
       dockerfile: Dockerfile
       target: frontend-debug
     ports:
-      - "3000:3000"
+      - "5173:5173"
     volumes:
       # Mount frontend source code for hot reloading
       - ./frontend:/app
@@ -92,11 +92,12 @@ services:
       - fourdrinier-network
     depends_on:
       - backend_debug
-    profiles: [debug]
+    profiles: [ debug ]
 
 volumes:
   db-data:
   test-data:
+
 
 networks:
   fourdrinier-network:
