@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getServerLogsUrl } from '@/lib/api/servers';
 import { AlertCircle } from 'lucide-react';
 
@@ -7,87 +7,49 @@ interface ServerLogsProps {
   serverStatus: string;
 }
 
-// Track server sessions to detect restarts
-let sessionCounter = 0;
-const sessionMap = new Map<string, { status: string; session: number }>();
-
 export function ServerLogs({ serverId, serverStatus }: ServerLogsProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<number | null>(null);
-  const isCancelledRef = useRef(false);
-
   // Determine if we should show an error based on server status
   const shouldConnect = serverStatus === 'running' || serverStatus === 'pending';
 
-  // Compute session key - increments when transitioning from stopped/created to running/pending
-  const sessionKey = useMemo(() => {
-    const previous = sessionMap.get(serverId);
-    const wasNotRunning = !previous || previous.status === 'stopped' || previous.status === 'created';
-    const isNowRunning = shouldConnect;
-
-    if (wasNotRunning && isNowRunning) {
-      // Server is restarting - increment session
-      sessionCounter++;
-      sessionMap.set(serverId, { status: serverStatus, session: sessionCounter });
-      return sessionCounter;
-    } else {
-      // Update status but keep session
-      const currentSession = previous?.session ?? 0;
-      sessionMap.set(serverId, { status: serverStatus, session: currentSession });
-      return currentSession;
-    }
-  }, [serverId, serverStatus, shouldConnect]);
-
-  // Clear logs when session changes
-  useEffect(() => {
-    setLogs([]);
-    setConnectionError(null);
-  }, [sessionKey]);
-
   // Only show error if there are no logs to display
   const error = !shouldConnect && logs.length === 0 ? 'Server is not running' : connectionError;
+  const showStoppedLine = !shouldConnect && logs.length > 0;
 
   // Manage EventSource connection
   useEffect(() => {
-    console.log(`useEffect running - serverStatus: ${serverStatus}, shouldConnect: ${shouldConnect}`);
+    let reconnectTimeout: ReturnType<typeof window.setTimeout> | null = null;
+    let cancelled = false;
 
     // Only connect if server is running or pending
     if (!shouldConnect) {
-      // Mark as cancelled and close existing connection
-      console.log('Server not running/pending - cancelling connections');
-      isCancelledRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        console.log('Clearing reconnect timeout');
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
       if (eventSourceRef.current) {
-        console.log('Closing EventSource');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      return;
+      return () => {
+        cancelled = true;
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+        }
+      };
     }
-
-    // Reset cancellation flag only when we're going to connect
-    isCancelledRef.current = false;
 
     const connect = () => {
       // Double-check we should still be connecting
-      if (isCancelledRef.current) {
-        console.log('Connect aborted: cancelled');
+      if (cancelled) {
         return;
       }
 
-      console.log('Connecting to logs stream...');
       const logsUrl = getServerLogsUrl(serverId);
       const eventSource = new EventSource(logsUrl);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
+        setLogs([]);
         setConnectionError(null);
       };
 
@@ -97,24 +59,19 @@ export function ServerLogs({ serverId, serverStatus }: ServerLogsProps) {
         }
       };
 
-      eventSource.onerror = (err) => {
-        console.error('EventSource error:', err);
+      eventSource.onerror = () => {
         eventSource.close();
 
         // Only reconnect if not cancelled
-        if (!isCancelledRef.current) {
-          console.log('Scheduling reconnect in 2 seconds...');
+        if (!cancelled) {
           // Clear any existing timeout first
-          if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
           }
-          reconnectTimeoutRef.current = window.setTimeout(() => {
-            console.log('Reconnect timeout fired');
-            reconnectTimeoutRef.current = null;
+          reconnectTimeout = window.setTimeout(() => {
+            reconnectTimeout = null;
             connect();
           }, 2000);
-        } else {
-          console.log('EventSource error but cancelled - not reconnecting');
         }
       };
     };
@@ -123,20 +80,17 @@ export function ServerLogs({ serverId, serverStatus }: ServerLogsProps) {
 
     // Cleanup on unmount or when dependencies change
     return () => {
-      console.log('useEffect cleanup running');
-      isCancelledRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        console.log('Cleanup: clearing timeout');
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
+      cancelled = true;
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
       }
       if (eventSourceRef.current) {
-        console.log('Cleanup: closing EventSource');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
     };
-  }, [serverId, shouldConnect, serverStatus]);
+  }, [serverId, shouldConnect]);
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
@@ -160,6 +114,7 @@ export function ServerLogs({ serverId, serverStatus }: ServerLogsProps) {
                 {log}
               </div>
             ))}
+            {showStoppedLine ? <div className="mb-1 text-red-400">Server stopped</div> : null}
             <div ref={logsEndRef} />
           </div>
         )}
