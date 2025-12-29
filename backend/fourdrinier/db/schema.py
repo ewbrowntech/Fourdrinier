@@ -34,8 +34,22 @@ class ServerCreate(BaseModel):
     )
 
 
+class ServerUpdate(BaseModel):
+    name: str = Field(
+        ...,
+        title="Server Name",
+        description="The name of the server.",
+        json_schema_extra={"examples": ["My Server"]},
+    )
+
+
 class ServerResponse(BaseModel):
     id: str
     name: str
     loader: str
     game_version: str
+    status: str = Field(
+        default="created",
+        title="Server Status",
+        description="Current status of the server (running, pending, stopped, created, error)",
+    )

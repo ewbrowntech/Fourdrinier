@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fourdrinier.core.utils import generate_id
 from fourdrinier.db.models import Server
 from fourdrinier.db.schema import ServerCreate
+from fourdrinier.db.schema import ServerUpdate
 
 
 async def list_servers(db: AsyncSession) -> list[Server]:
@@ -68,3 +69,25 @@ async def delete_server(db: AsyncSession, server_id: str) -> None:
     await db.delete(server)
     await db.commit()
     return None
+
+
+async def update_server(db: AsyncSession, server_id: str, server_update: ServerUpdate) -> Server:
+    """
+    Update a server object in the database.
+    """
+    server: Server | None = await db.get(Server, server_id)
+    if server is None:
+        raise NoResultFound
+
+    # Update the server fields
+    for key, value in server_update.model_dump(exclude_unset=True).items():
+        setattr(server, key, value)
+
+    try:
+        await db.commit()
+        await db.refresh(server)
+    except Exception as e:
+        await db.rollback()
+        raise e
+
+    return server

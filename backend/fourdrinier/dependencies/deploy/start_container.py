@@ -23,6 +23,62 @@ from fourdrinier.core.config import (
 from fourdrinier.dependencies.kubernetes_client import get_k8s_client
 
 
+async def get_server_status(server_id: str) -> str:
+    """
+    Get the current status of a Minecraft server by checking its Pod status
+
+    Args:
+        server_id: Unique server ID
+
+    Returns:
+        Status string: "running", "pending", "stopped", "created", or "error"
+    """
+    v1, namespace = get_k8s_client()
+    pod_name = f"minecraft-{server_id}"
+    pvc_name = f"minecraft-data-{server_id}"
+
+    try:
+        pod = v1.read_namespaced_pod(pod_name, namespace)
+
+        # Check pod phase
+        phase = pod.status.phase
+
+        if phase == "Running":
+            # Check if containers are actually ready
+            if pod.status.container_statuses:
+                for container_status in pod.status.container_statuses:
+                    if not container_status.ready:
+                        return "pending"
+            return "running"
+        elif phase == "Pending":
+            return "pending"
+        elif phase == "Failed":
+            return "error"
+        elif phase == "Succeeded":
+            return "stopped"
+        else:
+            return "pending"
+
+    except ApiException as e:
+        if e.status == 404:  # Pod not found
+            # Check if PVC exists to differentiate between "created" and "stopped"
+            try:
+                v1.read_namespaced_persistent_volume_claim(pvc_name, namespace)
+                # PVC exists, so server was started before and is now stopped
+                return "stopped"
+            except ApiException as pvc_e:
+                if pvc_e.status == 404:
+                    # No PVC, server has never been started
+                    return "created"
+                else:
+                    return "created"
+        else:
+            # If we can't determine status, assume created
+            return "created"
+    except Exception:
+        return "created"
+
+
 async def start_container(
     server_name: str, server_id: str, game_version: str = "1.20.1"
 ) -> str:
