@@ -11,15 +11,13 @@ the GPLv3 License. See the LICENSE file for more details.
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from fourdrinier.core.config import (
-    MINECRAFT_CPU_LIMIT,
-    MINECRAFT_CPU_REQUEST,
-    MINECRAFT_IMAGE,
-    MINECRAFT_MEMORY_LIMIT,
-    MINECRAFT_MEMORY_REQUEST,
-    MINECRAFT_PVC_SIZE,
-    MINECRAFT_STORAGE_CLASS,
-)
+from fourdrinier.core.config import MINECRAFT_CPU_LIMIT
+from fourdrinier.core.config import MINECRAFT_CPU_REQUEST
+from fourdrinier.core.config import MINECRAFT_IMAGE
+from fourdrinier.core.config import MINECRAFT_MEMORY_LIMIT
+from fourdrinier.core.config import MINECRAFT_MEMORY_REQUEST
+from fourdrinier.core.config import MINECRAFT_PVC_SIZE
+from fourdrinier.core.config import MINECRAFT_STORAGE_CLASS
 from fourdrinier.dependencies.kubernetes_client import get_k8s_client
 
 
@@ -79,9 +77,7 @@ async def get_server_status(server_id: str) -> str:
         return "created"
 
 
-async def start_container(
-    server_name: str, server_id: str, game_version: str = "1.20.1"
-) -> str:
+async def start_container(server_name: str, server_id: str, game_version: str = "1.20.1") -> str:
     """
     Start a Minecraft server as a Kubernetes Pod with PVC and LoadBalancer Service
 
@@ -117,9 +113,7 @@ async def start_container(
             spec=client.V1PersistentVolumeClaimSpec(
                 access_modes=["ReadWriteOnce"],
                 storage_class_name=MINECRAFT_STORAGE_CLASS,
-                resources=client.V1ResourceRequirements(
-                    requests={"storage": MINECRAFT_PVC_SIZE}
-                ),
+                resources=client.V1ResourceRequirements(requests={"storage": MINECRAFT_PVC_SIZE}),
             ),
         )
 
@@ -152,9 +146,7 @@ async def start_container(
                             client.V1EnvVar(name="VERSION", value=game_version),
                             client.V1EnvVar(name="MOTD", value="A Fourdrinier Server"),
                         ],
-                        volume_mounts=[
-                            client.V1VolumeMount(name="data", mount_path="/data")
-                        ],
+                        volume_mounts=[client.V1VolumeMount(name="data", mount_path="/data")],
                         resources=client.V1ResourceRequirements(
                             requests={
                                 "cpu": MINECRAFT_CPU_REQUEST,
@@ -245,22 +237,41 @@ async def stop_container(server_id: str) -> None:
     Stop a Minecraft server by deleting its Pod
 
     Note: PVC and Service are NOT deleted (allows restart with data intact)
+    This function returns immediately and the deletion happens in the background.
 
     Args:
         server_id: Unique server ID
     """
+    import asyncio
+
     v1, namespace = get_k8s_client()
     pod_name = f"minecraft-{server_id}"
 
-    try:
-        v1.delete_namespaced_pod(
-            pod_name, namespace, grace_period_seconds=30  # Allow graceful shutdown
-        )
-    except ApiException as e:
-        if e.status == 404:  # Not found
-            return  # Idempotent: already stopped
-        else:
-            raise RuntimeError(f"Failed to stop Pod: {e}")
+    def _delete_pod():
+        try:
+            v1.delete_namespaced_pod(
+                pod_name,
+                namespace,
+                grace_period_seconds=0,  # Immediate deletion to avoid hanging with active log streams
+                propagation_policy="Background",  # Delete asynchronously without blocking
+                _request_timeout=5.0,  # Force client-side timeout to prevent hanging
+            )
+        except ApiException as e:
+            if e.status == 404:  # Not found
+                pass  # Idempotent: already stopped
+            else:
+                # Log error but don't raise since this is fire-and-forget
+                import logging
+                logging.error(f"Failed to stop Pod {pod_name}: {e}")
+        except Exception as e:
+            # Handle timeout or other exceptions
+            import logging
+            logging.error(f"Error deleting Pod {pod_name}: {e}")
+
+    # Fire and forget - run in background without waiting
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _delete_pod)
+    # Return immediately without awaiting
 
 
 async def stream_server_logs(server_id: str, tail_lines: int = 100):
@@ -278,6 +289,7 @@ async def stream_server_logs(server_id: str, tail_lines: int = 100):
         RuntimeError: If pod not found or logs cannot be retrieved
     """
     import asyncio
+    import threading
 
     v1, namespace = get_k8s_client()
     pod_name = f"minecraft-{server_id}"
@@ -341,13 +353,48 @@ async def stream_server_logs(server_id: str, tail_lines: int = 100):
             _preload_content=False,  # Required for streaming
         )
 
-        # Yield log lines as they come in, formatted as SSE
-        # When _preload_content=False, we get an HTTPResponse object
-        for line in stream:
-            if line:
-                decoded_line = line.decode('utf-8') if isinstance(line, bytes) else line
+        # Move the blocking log stream off the event loop so other requests (like stop)
+        # are still served while logs are being tailed.
+        loop = asyncio.get_running_loop()
+        log_queue: asyncio.Queue[object] = asyncio.Queue()
+        stop_event = threading.Event()
+
+        def _pump_logs() -> None:
+            try:
+                for line in stream:
+                    if stop_event.is_set():
+                        break
+                    if not line:
+                        continue
+                    decoded_line = line.decode("utf-8") if isinstance(line, bytes) else line
+                    loop.call_soon_threadsafe(log_queue.put_nowait, decoded_line)
+            except Exception as exc:  # Surface errors back to the coroutine
+                loop.call_soon_threadsafe(log_queue.put_nowait, exc)
+            finally:
+                loop.call_soon_threadsafe(log_queue.put_nowait, None)
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+
+        worker = loop.run_in_executor(None, _pump_logs)
+
+        try:
+            while True:
+                item = await log_queue.get()
+                if item is None:
+                    break
+                if isinstance(item, Exception):
+                    raise item
                 # Format as SSE: each message must be prefixed with "data: " and end with \n\n
-                yield f"data: {decoded_line}\n\n"
+                yield f"data: {item}\n\n"
+        finally:
+            stop_event.set()
+            # Give the background thread a moment to exit; ignore timeouts.
+            try:
+                await asyncio.wait_for(worker, timeout=2)
+            except Exception:
+                pass
 
     except ApiException as e:
         if e.status == 404:
@@ -374,9 +421,7 @@ async def delete_server_resources(server_id: str) -> None:
 
     # Delete Pod (with immediate grace period)
     try:
-        v1.delete_namespaced_pod(
-            pod_name, namespace, grace_period_seconds=0  # Immediate deletion
-        )
+        v1.delete_namespaced_pod(pod_name, namespace, grace_period_seconds=0)  # Immediate deletion
     except ApiException as e:
         if e.status != 404:  # Ignore not found
             # Log but don't fail - continue cleanup
