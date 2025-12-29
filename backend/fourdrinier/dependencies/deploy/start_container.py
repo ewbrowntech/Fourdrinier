@@ -263,6 +263,102 @@ async def stop_container(server_id: str) -> None:
             raise RuntimeError(f"Failed to stop Pod: {e}")
 
 
+async def stream_server_logs(server_id: str, tail_lines: int = 100):
+    """
+    Stream logs from a Minecraft server pod in real-time
+
+    Args:
+        server_id: Unique server ID
+        tail_lines: Number of log lines to retrieve initially from the end (default: 100)
+
+    Yields:
+        Log lines as Server-Sent Events (SSE)
+
+    Raises:
+        RuntimeError: If pod not found or logs cannot be retrieved
+    """
+    import asyncio
+
+    v1, namespace = get_k8s_client()
+    pod_name = f"minecraft-{server_id}"
+
+    try:
+        # Poll until container is ready or timeout
+        max_wait_time = 300  # 5 minutes
+        poll_interval = 2  # 2 seconds
+        elapsed_time = 0
+
+        while elapsed_time < max_wait_time:
+            try:
+                pod = v1.read_namespaced_pod(pod_name, namespace)
+
+                # Check if container is ready
+                container_ready = False
+                if pod.status.container_statuses:
+                    container_status = pod.status.container_statuses[0]
+                    if container_status.state.running:
+                        container_ready = True
+                    elif container_status.state.waiting:
+                        # Send status update
+                        reason = container_status.state.waiting.reason or "Starting"
+                        yield f"data: Container is {reason.lower()}. Waiting for logs...\n\n"
+                    elif container_status.state.terminated:
+                        # Container has been stopped
+                        yield f"data: Container has been stopped.\n\n"
+                        return
+                else:
+                    # No container statuses yet - pod is still initializing
+                    yield f"data: Pod initializing...\n\n"
+
+                if container_ready:
+                    break
+
+                # Wait before next poll
+                await asyncio.sleep(poll_interval)
+                elapsed_time += poll_interval
+
+            except ApiException as e:
+                if e.status == 404:
+                    raise RuntimeError("Server pod not found. Server may not be running.")
+                else:
+                    # Temporary error, keep trying
+                    yield f"data: Waiting for container...\n\n"
+                    await asyncio.sleep(poll_interval)
+                    elapsed_time += poll_interval
+
+        # If we timed out waiting for container
+        if elapsed_time >= max_wait_time:
+            yield f"data: Timeout waiting for container to start\n\n"
+            return
+
+        # Container is ready, stream logs
+        stream = v1.read_namespaced_pod_log(
+            name=pod_name,
+            namespace=namespace,
+            follow=True,
+            tail_lines=tail_lines,
+            timestamps=True,
+            _preload_content=False,  # Required for streaming
+        )
+
+        # Yield log lines as they come in, formatted as SSE
+        # When _preload_content=False, we get an HTTPResponse object
+        for line in stream:
+            if line:
+                decoded_line = line.decode('utf-8') if isinstance(line, bytes) else line
+                # Format as SSE: each message must be prefixed with "data: " and end with \n\n
+                yield f"data: {decoded_line}\n\n"
+
+    except ApiException as e:
+        if e.status == 404:
+            raise RuntimeError("Server pod not found. Server may not be running.")
+        elif e.status == 400:
+            # Container not ready yet - format as SSE
+            yield "data: Container is starting. Waiting for logs...\n\n"
+        else:
+            raise RuntimeError(f"Failed to retrieve logs: {e}")
+
+
 async def delete_server_resources(server_id: str) -> None:
     """
     Delete all Kubernetes resources for a server (Pod, PVC, Service)

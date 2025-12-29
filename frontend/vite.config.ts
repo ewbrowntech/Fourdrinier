@@ -11,4 +11,15 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    host: '0.0.0.0',
+    allowedHosts: ['homelab', 'localhost', '.homelab'],
+    strictPort: false,
+    hmr: {
+      clientPort: 5173,
+    },
+    watch: {
+      usePolling: true,
+    },
+  },
 })

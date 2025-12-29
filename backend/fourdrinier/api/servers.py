@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +28,7 @@ from fourdrinier.dependencies.deploy.start_container import delete_server_resour
 from fourdrinier.dependencies.deploy.start_container import get_server_status
 from fourdrinier.dependencies.deploy.start_container import start_container
 from fourdrinier.dependencies.deploy.start_container import stop_container
+from fourdrinier.dependencies.deploy.start_container import stream_server_logs
 
 
 router = APIRouter()
@@ -162,3 +164,25 @@ async def stop_server(server_id: str, db: AsyncSession = Depends(get_db)) -> JSO
     await stop_container(server.id)
 
     return JSONResponse(content={"message": "Server stopped"})
+
+
+@router.get("/{server_id}/logs")
+async def get_server_logs(server_id: str):
+    """
+    Stream logs from a Minecraft server pod in real-time
+
+    Note: This endpoint doesn't use a database session to avoid holding
+    connections during long-running streams. Server validation happens
+    in the stream function via Kubernetes API.
+    """
+    try:
+        return StreamingResponse(
+            stream_server_logs(server_id, tail_lines=100),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=404, detail=str(e))

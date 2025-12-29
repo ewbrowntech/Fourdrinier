@@ -14,6 +14,7 @@ the GPLv3 License. See the LICENSE file for more details.
 from typing import Dict
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from fourdrinier.api.servers import router as servers_router
 from fourdrinier.core.config import PROJECT_NAME
@@ -21,6 +22,19 @@ from fourdrinier.core.config import PROJECT_NAME
 
 # Initialize the FastAPI application object
 app = FastAPI(title=PROJECT_NAME)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://homelab:5173",
+        "http://localhost:3000",
+    ],  # Frontend dev servers
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include the routers
 app.include_router(servers_router, prefix="/servers")

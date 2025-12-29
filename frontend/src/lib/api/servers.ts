@@ -42,3 +42,8 @@ export async function deleteServer(id: string): Promise<DeleteServerResponse> {
   const response = await apiClient.delete<DeleteServerResponse>(`/servers/${id}`);
   return response.data;
 }
+
+export function getServerLogsUrl(id: string): string {
+  const baseUrl = apiClient.defaults.baseURL || '';
+  return `${baseUrl}/servers/${id}/logs`;
+}
