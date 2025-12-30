@@ -38,6 +38,8 @@ const createServerSchema = z.object({
     .string()
     .min(1, 'Game version is required')
     .regex(/^\d+\.\d+\.\d+$/, 'Version must be in format X.Y.Z (e.g., 1.20.1)'),
+  modrinth_projects: z.array(z.string()).optional(),
+  collection_url: z.string().optional(), // Temporary field for collection import
 });
 
 type CreateServerFormValues = z.infer<typeof createServerSchema>;
@@ -52,16 +54,49 @@ export function CreateServerDialog() {
       name: 'My Server',
       loader: 'paper',
       game_version: '',
+      modrinth_projects: [],
+      collection_url: '',
     },
   });
 
   const onSubmit = async (data: CreateServerFormValues) => {
-    createServerMutation.mutate(data, {
+    // Remove collection_url from submission (it's only for UI)
+    const { collection_url, ...submitData } = data;
+    createServerMutation.mutate(submitData, {
       onSuccess: () => {
         setOpen(false);
         form.reset();
       },
     });
+  };
+
+  const handleImportCollection = async () => {
+    const collectionUrl = form.getValues('collection_url');
+    if (!collectionUrl) return;
+
+    try {
+      // This is a simplified version - in a real implementation, you'd call the import API
+      // For now, we'll just show a message that this needs backend integration
+      alert('Collection import will be implemented with the EditServerDialog component');
+    } catch (error) {
+      console.error('Failed to import collection:', error);
+    }
+  };
+
+  const handleAddProject = () => {
+    const currentProjects = form.getValues('modrinth_projects') || [];
+    const newProject = prompt('Enter Modrinth project slug/ID:');
+    if (newProject && !currentProjects.includes(newProject)) {
+      form.setValue('modrinth_projects', [...currentProjects, newProject]);
+    }
+  };
+
+  const handleRemoveProject = (projectToRemove: string) => {
+    const currentProjects = form.getValues('modrinth_projects') || [];
+    form.setValue(
+      'modrinth_projects',
+      currentProjects.filter((p) => p !== projectToRemove)
+    );
   };
 
   return (
@@ -133,6 +168,49 @@ export function CreateServerDialog() {
                 </FormItem>
               )}
             />
+
+            {/* Modrinth Projects - only show for Fabric */}
+            {form.watch('loader') === 'fabric' && (
+              <div className="space-y-3">
+                <FormLabel>Modrinth Projects (Optional)</FormLabel>
+                <FormDescription>
+                  Add Modrinth mod projects for automatic installation
+                </FormDescription>
+
+                {/* Display current projects as tags */}
+                {form.watch('modrinth_projects')?.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {form.watch('modrinth_projects')?.map((project) => (
+                      <div
+                        key={project}
+                        className="bg-secondary text-secondary-foreground px-3 py-1 rounded-md text-sm flex items-center gap-2"
+                      >
+                        <span>{project}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveProject(project)}
+                          className="hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add project button */}
+                <Button type="button" variant="outline" size="sm" onClick={handleAddProject}>
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Project
+                </Button>
+
+                {/* Collection import (simplified for now) */}
+                <div className="text-xs text-muted-foreground pt-2">
+                  Tip: Collection import available after server creation via Edit dialog
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel

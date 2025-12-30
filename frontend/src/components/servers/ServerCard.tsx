@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MoreVertical, Play, Square, Trash2 } from 'lucide-react';
+import { MoreVertical, Play, Square, Trash2, Edit } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import {
 import { useStartServer } from '@/lib/hooks/useStartServer';
 import { useStopServer } from '@/lib/hooks/useStopServer';
 import { useDeleteServer } from '@/lib/hooks/useDeleteServer';
+import { EditServerDialog } from './EditServerDialog';
 import type { Server } from '@/lib/api/types';
 
 interface ServerCardProps {
@@ -21,6 +23,7 @@ interface ServerCardProps {
 
 export function ServerCard({ server }: ServerCardProps) {
   const navigate = useNavigate();
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const startServerMutation = useStartServer();
   const stopServerMutation = useStopServer();
   const deleteServerMutation = useDeleteServer();
@@ -44,6 +47,11 @@ export function ServerCard({ server }: ServerCardProps) {
     if (window.confirm(`Are you sure you want to delete "${server.name}"? This will remove all server data.`)) {
       deleteServerMutation.mutate(server.id);
     }
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditDialogOpen(true);
   };
 
   const isLoading = startServerMutation.isPending || stopServerMutation.isPending || deleteServerMutation.isPending;
@@ -86,6 +94,11 @@ export function ServerCard({ server }: ServerCardProps) {
             <CardDescription className="mt-1">
               <Badge variant="secondary" className="mr-2">{server.loader}</Badge>
               <span className="text-sm">{server.game_version}</span>
+              {server.modrinth_projects && server.modrinth_projects.length > 0 && (
+                <Badge variant="outline" className="ml-2">
+                  {server.modrinth_projects.length} {server.modrinth_projects.length === 1 ? 'mod' : 'mods'}
+                </Badge>
+              )}
             </CardDescription>
           </div>
           <DropdownMenu>
@@ -95,6 +108,11 @@ export function ServerCard({ server }: ServerCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleEdit} disabled={isLoading}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Server
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleStart} disabled={isLoading || !canStart}>
                 <Play className="h-4 w-4 mr-2" />
                 Start Server
@@ -117,6 +135,11 @@ export function ServerCard({ server }: ServerCardProps) {
           <span className="font-mono text-xs">{server.id}</span>
         </div>
       </CardContent>
+      <EditServerDialog
+        server={server}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+      />
     </Card>
   );
 }

@@ -10,6 +10,7 @@ All rights reserved. This file is part of the Fourdrinier project and is release
 the GPLv3 License. See the LICENSE file for more details.
 """
 
+from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
@@ -22,3 +23,4 @@ class Server(Base):
     name: Mapped[str] = mapped_column(index=True, default="My Server")
     loader: Mapped[str]
     game_version: Mapped[str]
+    modrinth_projects: Mapped[list[str] | None] = mapped_column(JSON, default=None)

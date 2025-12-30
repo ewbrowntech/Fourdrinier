@@ -32,6 +32,12 @@ class ServerCreate(BaseModel):
         title="Game Version",
         json_schema_extra={"examples": ["1.17.1"]},
     )
+    modrinth_projects: list[str] | None = Field(
+        default=None,
+        title="Modrinth Projects",
+        description="List of Modrinth project slugs/IDs for Fabric mod installation",
+        json_schema_extra={"examples": [["lithium", "sodium", "fabric-api"]]},
+    )
 
 
 class ServerUpdate(BaseModel):
@@ -41,6 +47,12 @@ class ServerUpdate(BaseModel):
         description="The name of the server.",
         json_schema_extra={"examples": ["My Server"]},
     )
+    modrinth_projects: list[str] | None = Field(
+        default=None,
+        title="Modrinth Projects",
+        description="List of Modrinth project slugs/IDs for Fabric mod installation",
+        json_schema_extra={"examples": [["lithium", "sodium", "fabric-api"]]},
+    )
 
 
 class ServerResponse(BaseModel):
@@ -48,6 +60,7 @@ class ServerResponse(BaseModel):
     name: str
     loader: str
     game_version: str
+    modrinth_projects: list[str] | None = None
     status: str = Field(
         default="created",
         title="Server Status",

@@ -77,7 +77,13 @@ async def get_server_status(server_id: str) -> str:
         return "created"
 
 
-async def start_container(server_name: str, server_id: str, game_version: str = "1.20.1") -> str:
+async def start_container(
+    server_name: str,
+    server_id: str,
+    game_version: str = "1.20.1",
+    loader: str = "paper",
+    modrinth_projects: list[str] | None = None,
+) -> str:
     """
     Start a Minecraft server as a Kubernetes Pod with PVC and LoadBalancer Service
 
@@ -85,6 +91,8 @@ async def start_container(server_name: str, server_id: str, game_version: str = 
         server_name: Human-readable server name (for labels)
         server_id: Unique server ID (used for resource names)
         game_version: Minecraft version to run
+        loader: Server loader type (paper, vanilla, forge, fabric)
+        modrinth_projects: List of Modrinth project slugs/IDs for mod installation
 
     Returns:
         Pod name (equivalent to container ID in Docker)
@@ -126,6 +134,22 @@ async def start_container(server_name: str, server_id: str, game_version: str = 
                 raise RuntimeError(f"Failed to create PVC: {e}")
 
         # Step 2: Create Pod
+        # Build environment variables dynamically
+        env_vars = [
+            client.V1EnvVar(name="EULA", value="true"),
+            client.V1EnvVar(name="VERSION", value=game_version),
+            client.V1EnvVar(name="MOTD", value="A Fourdrinier Server"),
+        ]
+
+        # Add Fabric + Modrinth configuration if applicable
+        if loader == "fabric" and modrinth_projects:
+            # Join list into comma-separated string
+            projects_str = ",".join(modrinth_projects)
+            env_vars.extend([
+                client.V1EnvVar(name="MODRINTH_PROJECTS", value=projects_str),
+                client.V1EnvVar(name="MODRINTH_DOWNLOAD_DEPENDENCIES", value="required"),
+            ])
+
         pod = client.V1Pod(
             metadata=client.V1ObjectMeta(
                 name=pod_name,
@@ -141,11 +165,7 @@ async def start_container(server_name: str, server_id: str, game_version: str = 
                         name="minecraft",
                         image=MINECRAFT_IMAGE,
                         ports=[client.V1ContainerPort(container_port=25565, protocol="TCP")],
-                        env=[
-                            client.V1EnvVar(name="EULA", value="true"),
-                            client.V1EnvVar(name="VERSION", value=game_version),
-                            client.V1EnvVar(name="MOTD", value="A Fourdrinier Server"),
-                        ],
+                        env=env_vars,
                         volume_mounts=[client.V1VolumeMount(name="data", mount_path="/data")],
                         resources=client.V1ResourceRequirements(
                             requests={

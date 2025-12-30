@@ -11,8 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X } from 'lucide-react';
+import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X, Edit } from 'lucide-react';
 import { ServerLogs } from '@/components/servers/ServerLogs';
+import { EditServerDialog } from '@/components/servers/EditServerDialog';
 
 export function ServerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,7 @@ export function ServerDetailPage() {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const handleStartEdit = () => {
     setEditedName(server?.name || '');
@@ -229,6 +231,10 @@ export function ServerDetailPage() {
               <Square className="h-4 w-4 mr-2" />
               {stopServerMutation.isPending ? 'Stopping...' : 'Stop Server'}
             </Button>
+            <Button onClick={() => setEditDialogOpen(true)} variant="outline" disabled={isActionPending}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Server
+            </Button>
             <Button onClick={handleDelete} variant="destructive" disabled={isActionPending}>
               <Trash2 className="h-4 w-4 mr-2" />
               {deleteServerMutation.isPending ? 'Deleting...' : 'Delete Server'}
@@ -236,6 +242,11 @@ export function ServerDetailPage() {
           </div>
         </CardContent>
       </Card>
+      <EditServerDialog
+        server={server}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+      />
     </div>
   );
 }

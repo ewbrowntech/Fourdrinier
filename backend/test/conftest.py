@@ -16,6 +16,8 @@ import os
 os.environ["DB_URL"] = "sqlite+aiosqlite:///./test.db"
 
 from typing import AsyncGenerator
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport
@@ -61,3 +63,26 @@ async def client(test_db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture
+def mock_k8s_client():
+    """
+    Mock Kubernetes client for testing.
+
+    Provides a mocked CoreV1Api client that simulates Kubernetes operations
+    without requiring an actual cluster.
+    """
+    from kubernetes.client.rest import ApiException
+
+    mock_v1 = MagicMock()
+    namespace = "minecraft"
+
+    # Configure read operations to raise 404 by default (simulating non-existent resources)
+    # This gives servers a "created" status (never started) by default
+    mock_v1.read_namespaced_pod.side_effect = ApiException(status=404)
+    mock_v1.read_namespaced_persistent_volume_claim.side_effect = ApiException(status=404)
+
+    with patch('fourdrinier.dependencies.deploy.start_container.get_k8s_client',
+               return_value=(mock_v1, namespace)):
+        yield mock_v1

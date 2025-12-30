@@ -29,6 +29,7 @@ from fourdrinier.dependencies.deploy.start_container import get_server_status
 from fourdrinier.dependencies.deploy.start_container import start_container
 from fourdrinier.dependencies.deploy.start_container import stop_container
 from fourdrinier.dependencies.deploy.start_container import stream_server_logs
+from fourdrinier.services.modrinth_client import get_collection_projects
 
 
 router = APIRouter()
@@ -45,6 +46,7 @@ async def create_server(server_input: ServerCreate, db: AsyncSession = Depends(g
         "name": server.name,
         "loader": server.loader,
         "game_version": server.game_version,
+        "modrinth_projects": server.modrinth_projects,
         "status": "created",  # New servers start in created state
     }
 
@@ -65,6 +67,7 @@ async def list_servers(db: AsyncSession = Depends(get_db)) -> list[dict]:
             "name": server.name,
             "loader": server.loader,
             "game_version": server.game_version,
+            "modrinth_projects": server.modrinth_projects,
             "status": status,
         }
         servers_with_status.append(server_dict)
@@ -89,6 +92,7 @@ async def get_server(server_id: str, db: AsyncSession = Depends(get_db)) -> dict
         "name": server.name,
         "loader": server.loader,
         "game_version": server.game_version,
+        "modrinth_projects": server.modrinth_projects,
         "status": status,
     }
 
@@ -112,8 +116,49 @@ async def update_server(
         "name": server.name,
         "loader": server.loader,
         "game_version": server.game_version,
+        "modrinth_projects": server.modrinth_projects,
         "status": status,
     }
+
+
+@router.post("/{server_id}/import-collection", status_code=200)
+async def import_modrinth_collection(
+    server_id: str, collection_url: str, db: AsyncSession = Depends(get_db)
+) -> JSONResponse:
+    """
+    Import Modrinth projects from a collection URL and append to server's project list
+    """
+    # Get the server
+    try:
+        server: Server = await crud.get_server(db, server_id)
+    except NoResultFound:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Fetch projects from Modrinth collection
+    try:
+        new_projects = await get_collection_projects(collection_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch collection from Modrinth: {str(e)}")
+
+    # Merge with existing projects (deduplicate)
+    existing_projects = server.modrinth_projects or []
+    combined_projects = list(set(existing_projects + new_projects))
+
+    # Update server
+    server.modrinth_projects = combined_projects
+    await db.commit()
+    await db.refresh(server)
+
+    return JSONResponse(
+        content={
+            "message": f"Imported {len(new_projects)} projects from collection",
+            "projects": combined_projects,
+            "new_count": len(new_projects),
+            "total_count": len(combined_projects),
+        }
+    )
 
 
 @router.delete("/{server_id}", status_code=200)
@@ -144,11 +189,20 @@ async def start_server(server_id: str, db: AsyncSession = Depends(get_db)) -> JS
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Start the server in Kubernetes
-    pod_name: str = await start_container(
-        server_name=server.name, server_id=server.id, game_version=server.game_version
-    )
+    try:
+        pod_name: str = await start_container(
+            server_name=server.name,
+            server_id=server.id,
+            game_version=server.game_version,
+            loader=server.loader,
+            modrinth_projects=server.modrinth_projects,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return JSONResponse(content={"pod": {"name": pod_name, "namespace": "minecraft"}})
+    return JSONResponse(
+        content={"pod": {"name": pod_name, "namespace": "minecraft"}}, status_code=201
+    )
 
 
 @router.put("/{server_id}/stop", status_code=200)

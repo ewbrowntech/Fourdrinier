@@ -10,6 +10,8 @@ All rights reserved. This file is part of the Fourdrinier project and is release
 the GPLv3 License. See the LICENSE file for more details.
 """
 
+from unittest.mock import MagicMock
+
 from httpx import AsyncClient
 from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fourdrinier.db.models import Server
 
 
-async def test_get_server_000_nominal(client: AsyncClient, test_db: AsyncSession) -> None:
+async def test_get_server_000_nominal(
+    client: AsyncClient, test_db: AsyncSession, mock_k8s_client: MagicMock
+) -> None:
     """
     Test 000 - Nominal
     Conditions: Server1 in database, request Server1
@@ -39,6 +43,8 @@ async def test_get_server_000_nominal(client: AsyncClient, test_db: AsyncSession
         "name": server1.name,
         "loader": server1.loader,
         "game_version": server1.game_version,
+        "modrinth_projects": server1.modrinth_projects,
+        "status": "created",
     }
 
 
