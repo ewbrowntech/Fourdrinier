@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -30,6 +30,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { useCreateServer } from '@/lib/hooks/useCreateServer';
+import { getModrinthProjects } from '@/lib/api/modrinth';
+import type { ModrinthProjectInfo } from '@/lib/api/types';
 
 const createServerSchema = z.object({
   name: z.string().optional(),
@@ -46,6 +48,7 @@ type CreateServerFormValues = z.infer<typeof createServerSchema>;
 
 export function CreateServerDialog() {
   const [open, setOpen] = useState(false);
+  const [projectInfoMap, setProjectInfoMap] = useState<Record<string, ModrinthProjectInfo>>({});
   const createServerMutation = useCreateServer();
 
   const form = useForm<CreateServerFormValues>({
@@ -82,6 +85,33 @@ export function CreateServerDialog() {
       console.error('Failed to import collection:', error);
     }
   };
+
+  const modrinthProjects = form.watch('modrinth_projects') || [];
+
+  useEffect(() => {
+    if (modrinthProjects.length === 0) {
+      return;
+    }
+
+    const missingProjects = modrinthProjects.filter((projectId) => !projectInfoMap[projectId]);
+    if (missingProjects.length === 0) {
+      return;
+    }
+
+    getModrinthProjects(missingProjects)
+      .then((projects) => {
+        setProjectInfoMap((prev) => {
+          const next = { ...prev };
+          projects.forEach((project) => {
+            next[project.project_id] = project;
+          });
+          return next;
+        });
+      })
+      .catch((err) => {
+        console.error('Failed to resolve Modrinth project metadata:', err);
+      });
+  }, [modrinthProjects, projectInfoMap]);
 
   const handleAddProject = () => {
     const currentProjects = form.getValues('modrinth_projects') || [];
@@ -180,21 +210,33 @@ export function CreateServerDialog() {
                 {/* Display current projects as tags */}
                 {form.watch('modrinth_projects')?.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {form.watch('modrinth_projects')?.map((project) => (
-                      <div
-                        key={project}
-                        className="bg-secondary text-secondary-foreground px-3 py-1 rounded-md text-sm flex items-center gap-2"
-                      >
-                        <span>{project}</span>
+                    {form.watch('modrinth_projects')?.map((projectId) => {
+                      const projectInfo = projectInfoMap[projectId];
+                      const displayName = projectInfo?.title || projectId;
+
+                      return (
+                        <div
+                          key={projectId}
+                          className="bg-secondary text-secondary-foreground px-3 py-1 rounded-md text-sm flex items-center gap-2"
+                        >
+                          {projectInfo?.icon_url && (
+                            <img
+                              src={projectInfo.icon_url}
+                              alt={displayName}
+                              className="h-4 w-4 rounded"
+                            />
+                          )}
+                          <span>{displayName}</span>
                         <button
                           type="button"
-                          onClick={() => handleRemoveProject(project)}
+                          onClick={() => handleRemoveProject(projectId)}
                           className="hover:text-destructive"
                         >
                           ×
                         </button>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 

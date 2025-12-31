@@ -41,3 +41,27 @@ export interface StopServerResponse {
 export interface DeleteServerResponse {
   message: string;
 }
+
+export interface ModrinthProjectInfo {
+  project_id: string;
+  title: string;
+  description: string;
+  icon_url?: string | null;
+}
+
+export interface IncompatibleProject {
+  project_id: string;
+  title: string;
+  reason: string;
+  supported_versions: string[];
+  supported_loaders: string[];
+}
+
+export interface ImportCollectionResponse {
+  message: string;
+  projects: string[];
+  new_count: number;
+  total_count: number;
+  warnings: string[];
+  incompatible_projects: IncompatibleProject[];
+}

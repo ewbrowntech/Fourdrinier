@@ -18,6 +18,11 @@ build-backend:
 	@echo "Building the .."
 	@docker compose $(PRODUCTION_CONFIG) build backend
 
+# Build the backend
+build-backend-debug:
+	@echo "Building the backend for debugging..."
+	@docker compose $(DEBUG_CONFIG) build backend_debug
+
 build-backend-test:
 	@echo "Building the backend for testing..."
 	@docker compose $(TESTING_CONFIG) build backend_test
@@ -56,8 +61,8 @@ cleanup:
 	@docker compose $(DEBUG_CONFIG) down --volumes
 
 # Generate an Alembic revision file
-revision: build-backend
+revision: build-backend-debug
 	@echo "Creating a new revision..."
-	- docker compose $(TESTING_CONFIG) down --volumes
-	@docker compose $(TESTING_CONFIG) run --rm --volume $(PWD)/backend/fourdrinier/alembic/versions:/fd/backend/fourdrinier/alembic/versions --entrypoint /fd/backend/scripts/generate_revision.sh backend $(ALEMBIC_TAG)
-	- docker compose $(TESTING_CONFIG) down --volumes
+	- docker compose $(DEBUG_CONFIG) down --volumes
+	@docker compose $(DEBUG_CONFIG) run --rm --volume $(PWD)/backend/fourdrinier/alembic/versions:/fd/backend/fourdrinier/alembic/versions --entrypoint /fd/backend/scripts/generate_revision.sh backend_debug $(ALEMBIC_TAG)
+	- docker compose $(DEBUG_CONFIG) down --volumes

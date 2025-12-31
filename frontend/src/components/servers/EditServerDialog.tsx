@@ -20,11 +20,19 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Plus, Download, AlertCircle } from 'lucide-react';
+import { Plus, Download, AlertCircle, ExternalLink } from 'lucide-react';
 import { useUpdateServer } from '@/lib/hooks/useUpdateServer';
-import type { Server } from '@/lib/api/types';
+import type { Server, ModrinthProjectInfo } from '@/lib/api/types';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { importCollection } from '@/lib/api/servers';
+import { getModrinthProjects } from '@/lib/api/modrinth';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 const editServerSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -42,6 +50,7 @@ interface EditServerDialogProps {
 
 export function EditServerDialog({ server, open, onOpenChange }: EditServerDialogProps) {
   const [isImporting, setIsImporting] = useState(false);
+  const [projectInfoMap, setProjectInfoMap] = useState<Record<string, ModrinthProjectInfo>>({});
   const updateServerMutation = useUpdateServer();
 
   const form = useForm<EditServerFormValues>({
@@ -56,11 +65,28 @@ export function EditServerDialog({ server, open, onOpenChange }: EditServerDialo
   // Load server data when dialog opens
   useEffect(() => {
     if (server && open) {
+      setProjectInfoMap({});
       form.reset({
         name: server.name,
         modrinth_projects: server.modrinth_projects || [],
         collection_url: '',
       });
+
+      // Fetch enriched metadata for display
+      if (server.modrinth_projects && server.modrinth_projects.length > 0) {
+        getModrinthProjects(server.modrinth_projects)
+          .then((projects) => {
+            const nextMap: Record<string, ModrinthProjectInfo> = {};
+            projects.forEach((project) => {
+              nextMap[project.project_id] = project;
+            });
+            setProjectInfoMap(nextMap);
+          })
+          .catch((err) => {
+            console.error('Failed to fetch enriched project metadata:', err);
+            setProjectInfoMap({});
+          });
+      }
     }
   }, [server, open, form]);
 
@@ -92,20 +118,26 @@ export function EditServerDialog({ server, open, onOpenChange }: EditServerDialo
 
     setIsImporting(true);
     try {
-      const response = await fetch(
-        `/api/servers/${server.id}/import-collection?collection_url=${encodeURIComponent(collectionUrl)}`,
-        { method: 'POST' }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to import collection');
-      }
-
-      const result = await response.json();
+      const result = await importCollection(server.id, collectionUrl);
       form.setValue('modrinth_projects', result.projects);
       form.setValue('collection_url', '');
 
-      toast.success(`Added ${result.new_count} projects from collection`);
+      // Refresh enriched metadata after import
+      if (result.projects.length > 0) {
+        const projects = await getModrinthProjects(result.projects);
+        const nextMap: Record<string, ModrinthProjectInfo> = {};
+        projects.forEach((project) => {
+          nextMap[project.project_id] = project;
+        });
+        setProjectInfoMap(nextMap);
+      }
+
+      // Show warning if incompatible projects detected
+      if (result.warnings.length > 0) {
+        toast.warning(`Added ${result.new_count} projects. ${result.incompatible_projects.length} may be incompatible.`);
+      } else {
+        toast.success(`Added ${result.new_count} projects from collection`);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to import collection');
     } finally {
@@ -130,6 +162,32 @@ export function EditServerDialog({ server, open, onOpenChange }: EditServerDialo
   };
 
   const isFabric = server?.loader === 'fabric';
+  const modrinthProjects = form.watch('modrinth_projects') || [];
+
+  useEffect(() => {
+    if (!open || modrinthProjects.length === 0) {
+      return;
+    }
+
+    const missingProjects = modrinthProjects.filter((projectId) => !projectInfoMap[projectId]);
+    if (missingProjects.length === 0) {
+      return;
+    }
+
+    getModrinthProjects(missingProjects)
+      .then((projects) => {
+        setProjectInfoMap((prev) => {
+          const next = { ...prev };
+          projects.forEach((project) => {
+            next[project.project_id] = project;
+          });
+          return next;
+        });
+      })
+      .catch((err) => {
+        console.error('Failed to resolve Modrinth project metadata:', err);
+      });
+  }, [modrinthProjects, open, projectInfoMap]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -182,23 +240,51 @@ export function EditServerDialog({ server, open, onOpenChange }: EditServerDialo
 
                   {/* Display current projects as tags */}
                   {(form.watch('modrinth_projects')?.length ?? 0) > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {form.watch('modrinth_projects')?.map((project) => (
-                        <div
-                          key={project}
-                          className="bg-secondary text-secondary-foreground px-3 py-1 rounded-md text-sm flex items-center gap-2"
-                        >
-                          <span>{project}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveProject(project)}
-                            className="hover:text-destructive"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                    <TooltipProvider>
+                      <div className="flex flex-wrap gap-2">
+                        {form.watch('modrinth_projects')?.map((projectId) => {
+                          const projectInfo = projectInfoMap[projectId];
+                          const displayName = projectInfo?.title || projectId;
+                          const modrinthUrl = `https://modrinth.com/mod/${projectId}`;
+
+                          return (
+                            <Tooltip key={projectId}>
+                              <TooltipTrigger asChild>
+                                <div className="bg-secondary text-secondary-foreground px-3 py-1 rounded-md text-sm flex items-center gap-2">
+                                  {projectInfo?.icon_url && (
+                                    <img
+                                      src={projectInfo.icon_url}
+                                      alt={displayName}
+                                      className="h-4 w-4 rounded"
+                                    />
+                                  )}
+                                  <span>{displayName}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveProject(projectId)}
+                                    className="hover:text-destructive"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <a
+                                  href={modrinthUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-xs hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  Modrinth
+                                </a>
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
+                    </TooltipProvider>
                   ) : (
                     <div className="text-sm text-muted-foreground">No projects added yet</div>
                   )}

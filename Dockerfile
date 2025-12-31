@@ -98,6 +98,9 @@ RUN poetry install --with dev --no-root
 COPY backend/fourdrinier/alembic.ini /fd/alembic.ini
 COPY backend/fourdrinier /fd/backend/fourdrinier
 
+# Copy scripts for database migrations and other tasks
+COPY backend/scripts /fd/backend/scripts
+
 # Set PYTHONPATH so Python can find the fourdrinier module
 ENV PYTHONPATH=/fd/backend
 

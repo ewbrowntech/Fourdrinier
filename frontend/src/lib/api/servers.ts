@@ -6,6 +6,7 @@ import type {
   StartServerResponse,
   StopServerResponse,
   DeleteServerResponse,
+  ImportCollectionResponse,
 } from './types';
 
 export async function getAllServers(): Promise<Server[]> {
@@ -46,4 +47,13 @@ export async function deleteServer(id: string): Promise<DeleteServerResponse> {
 export function getServerLogsUrl(id: string): string {
   const baseUrl = apiClient.defaults.baseURL || '';
   return `${baseUrl}/servers/${id}/logs`;
+}
+
+export async function importCollection(id: string, collectionUrl: string): Promise<ImportCollectionResponse> {
+  const response = await apiClient.post<ImportCollectionResponse>(
+    `/servers/${id}/import-collection`,
+    null,
+    { params: { collection_url: collectionUrl } }
+  );
+  return response.data;
 }

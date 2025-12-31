@@ -10,6 +10,9 @@ the GPLv3 License. See the LICENSE file for more details.
 
 from kubernetes import client
 from kubernetes.client.rest import ApiException
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
+import logging
 
 from fourdrinier.core.config import MINECRAFT_CPU_LIMIT
 from fourdrinier.core.config import MINECRAFT_CPU_REQUEST
@@ -19,6 +22,8 @@ from fourdrinier.core.config import MINECRAFT_MEMORY_REQUEST
 from fourdrinier.core.config import MINECRAFT_PVC_SIZE
 from fourdrinier.core.config import MINECRAFT_STORAGE_CLASS
 from fourdrinier.dependencies.kubernetes_client import get_k8s_client
+
+logger = logging.getLogger(__name__)
 
 
 async def get_server_status(server_id: str) -> str:
@@ -83,6 +88,7 @@ async def start_container(
     game_version: str = "1.20.1",
     loader: str = "paper",
     modrinth_projects: list[str] | None = None,
+    db: AsyncSession | None = None,
 ) -> str:
     """
     Start a Minecraft server as a Kubernetes Pod with PVC and LoadBalancer Service
@@ -93,13 +99,46 @@ async def start_container(
         game_version: Minecraft version to run
         loader: Server loader type (paper, vanilla, forge, fabric)
         modrinth_projects: List of Modrinth project slugs/IDs for mod installation
+        db: Database session for compatibility validation (required for Fabric servers)
 
     Returns:
         Pod name (equivalent to container ID in Docker)
 
     Raises:
         RuntimeError: If resource creation fails
+        HTTPException: If incompatible mods are detected (400)
     """
+    # CRITICAL: Validate modrinth projects compatibility BEFORE creating any resources
+    if loader == "fabric" and modrinth_projects and db:
+        from fourdrinier.db.models import Server
+        from fourdrinier.services.compatibility_validator import validate_server_modrinth_projects
+
+        # Create temporary server object for validation
+        temp_server = Server(
+            id=server_id,
+            name=server_name,
+            loader=loader,
+            game_version=game_version,
+            modrinth_projects=modrinth_projects,
+        )
+
+        validation_result = await validate_server_modrinth_projects(temp_server, db)
+
+        if not validation_result["compatible"]:
+            # BLOCK startup - incompatible mods will crash the server
+            incompatible_count = len(validation_result["incompatible_projects"])
+            error_details = "\n".join(validation_result["warnings"])
+
+            logger.error(
+                f"Server {server_id} startup blocked: {incompatible_count} incompatible mod(s) detected. "
+                f"Details: {error_details}"
+            )
+
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot start server with {incompatible_count} incompatible mod(s):\n{error_details}"
+            )
+
     v1, namespace = get_k8s_client()
 
     # Resource names (Kubernetes-compatible: lowercase alphanumeric + hyphens)

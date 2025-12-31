@@ -66,3 +66,45 @@ class ServerResponse(BaseModel):
         title="Server Status",
         description="Current status of the server (running, pending, stopped, created, error)",
     )
+
+
+class ModrinthProjectEnriched(BaseModel):
+    """Enriched project metadata with compatibility information"""
+    project_id: str
+    title: str
+    description: str
+    icon_url: str | None = None
+    compatible: bool
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ModrinthProjectInfo(BaseModel):
+    """Project metadata without compatibility validation"""
+    project_id: str
+    title: str
+    description: str = ""
+    icon_url: str | None = None
+
+
+class ModrinthProjectLookupRequest(BaseModel):
+    """Request payload for resolving Modrinth project IDs to metadata"""
+    project_ids: list[str]
+
+
+class IncompatibleProject(BaseModel):
+    """Details about an incompatible project"""
+    project_id: str
+    title: str
+    reason: str
+    supported_versions: list[str]
+    supported_loaders: list[str]
+
+
+class ImportCollectionResponse(BaseModel):
+    """Response for collection import with compatibility warnings"""
+    message: str
+    projects: list[str]
+    new_count: int
+    total_count: int
+    warnings: list[str] = Field(default_factory=list)
+    incompatible_projects: list[IncompatibleProject] = Field(default_factory=list)

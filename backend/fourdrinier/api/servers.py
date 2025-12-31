@@ -23,6 +23,11 @@ from fourdrinier.db.models import Server
 from fourdrinier.db.schema import ServerCreate
 from fourdrinier.db.schema import ServerResponse
 from fourdrinier.db.schema import ServerUpdate
+from fourdrinier.db.schema import ModrinthProjectEnriched
+from fourdrinier.db.schema import ModrinthProjectInfo
+from fourdrinier.db.schema import ModrinthProjectLookupRequest
+from fourdrinier.db.schema import ImportCollectionResponse
+from fourdrinier.db.schema import IncompatibleProject
 from fourdrinier.db.session import get_db
 from fourdrinier.dependencies.deploy.start_container import delete_server_resources
 from fourdrinier.dependencies.deploy.start_container import get_server_status
@@ -30,6 +35,8 @@ from fourdrinier.dependencies.deploy.start_container import start_container
 from fourdrinier.dependencies.deploy.start_container import stop_container
 from fourdrinier.dependencies.deploy.start_container import stream_server_logs
 from fourdrinier.services.modrinth_client import get_collection_projects
+from fourdrinier.services.modrinth_client import get_multiple_projects_metadata
+from fourdrinier.services.compatibility_validator import validate_server_modrinth_projects
 
 
 router = APIRouter()
@@ -121,12 +128,106 @@ async def update_server(
     }
 
 
-@router.post("/{server_id}/import-collection", status_code=200)
+@router.get("/{server_id}/modrinth-projects", status_code=200, response_model=list[ModrinthProjectEnriched])
+async def get_server_modrinth_projects(
+    server_id: str, db: AsyncSession = Depends(get_db)
+) -> list[dict]:
+    """
+    Get enriched metadata for all Modrinth projects on a server.
+    Includes compatibility validation against server's game version and loader.
+    """
+    # Get server
+    try:
+        server: Server = await crud.get_server(db, server_id)
+    except NoResultFound:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    project_ids = list(server.modrinth_projects or [])
+    # If no modrinth_projects, return empty list
+    if not project_ids:
+        return []
+
+    # Fetch metadata for all projects from Modrinth API
+    projects_metadata = await get_multiple_projects_metadata(project_ids)
+
+    # Validate compatibility and build enriched response
+    enriched_projects = []
+
+    for project_id in project_ids:
+        metadata = projects_metadata.get(project_id)
+
+        if metadata is None:
+            # Project not found
+            enriched_projects.append({
+                "project_id": project_id,
+                "title": project_id,
+                "description": "Project not found on Modrinth",
+                "icon_url": None,
+                "compatible": False,
+                "warnings": ["Project not found on Modrinth"],
+            })
+            continue
+
+        # Check compatibility
+        from fourdrinier.services.compatibility_validator import check_project_compatibility
+        compatible, warnings = check_project_compatibility(
+            metadata, server.game_version, server.loader
+        )
+
+        enriched_projects.append({
+            "project_id": project_id,
+            "title": metadata.get("title", project_id),
+            "description": metadata.get("description", ""),
+            "icon_url": metadata.get("icon_url"),
+            "compatible": compatible,
+            "warnings": warnings,
+        })
+
+    return enriched_projects
+
+
+@router.post("/modrinth-projects/lookup", status_code=200, response_model=list[ModrinthProjectInfo])
+async def lookup_modrinth_projects(
+    payload: ModrinthProjectLookupRequest, db: AsyncSession = Depends(get_db)
+) -> list[dict]:
+    """
+    Resolve Modrinth project IDs/slugs to metadata without server compatibility checks.
+    """
+    project_ids = list(payload.project_ids or [])
+    if not project_ids:
+        return []
+
+    projects_metadata = await get_multiple_projects_metadata(project_ids)
+    resolved_projects: list[dict] = []
+
+    for project_id in project_ids:
+        metadata = projects_metadata.get(project_id)
+        if metadata is None:
+            resolved_projects.append({
+                "project_id": project_id,
+                "title": project_id,
+                "description": "Project not found on Modrinth",
+                "icon_url": None,
+            })
+            continue
+
+        resolved_projects.append({
+            "project_id": project_id,
+            "title": metadata.get("title", project_id),
+            "description": metadata.get("description", ""),
+            "icon_url": metadata.get("icon_url"),
+        })
+
+    return resolved_projects
+
+
+@router.post("/{server_id}/import-collection", status_code=200, response_model=ImportCollectionResponse)
 async def import_modrinth_collection(
     server_id: str, collection_url: str, db: AsyncSession = Depends(get_db)
-) -> JSONResponse:
+) -> ImportCollectionResponse:
     """
-    Import Modrinth projects from a collection URL and append to server's project list
+    Import Modrinth projects from a collection URL and append to server's project list.
+    Validates compatibility but allows all projects to be added with warnings.
     """
     # Get the server
     try:
@@ -151,13 +252,19 @@ async def import_modrinth_collection(
     await db.commit()
     await db.refresh(server)
 
-    return JSONResponse(
-        content={
-            "message": f"Imported {len(new_projects)} projects from collection",
-            "projects": combined_projects,
-            "new_count": len(new_projects),
-            "total_count": len(combined_projects),
-        }
+    # Validate compatibility (informative only, doesn't block)
+    validation_result = await validate_server_modrinth_projects(server, db)
+
+    return ImportCollectionResponse(
+        message=f"Imported {len(new_projects)} projects from collection",
+        projects=combined_projects,
+        new_count=len(new_projects),
+        total_count=len(combined_projects),
+        warnings=validation_result["warnings"],
+        incompatible_projects=[
+            IncompatibleProject(**proj)
+            for proj in validation_result["incompatible_projects"]
+        ],
     )
 
 
@@ -181,14 +288,15 @@ async def delete_server(server_id: str, db: AsyncSession = Depends(get_db)) -> N
 @router.post("/{server_id}/start", status_code=201)
 async def start_server(server_id: str, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """
-    Start a Minecraft server in Kubernetes
+    Start a Minecraft server in Kubernetes.
+    For Fabric servers, validates mod compatibility before starting.
     """
     try:
         server: Server = await crud.get_server(db, server_id)
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    # Start the server in Kubernetes
+    # Start the server in Kubernetes (includes compatibility validation)
     try:
         pod_name: str = await start_container(
             server_name=server.name,
@@ -196,7 +304,11 @@ async def start_server(server_id: str, db: AsyncSession = Depends(get_db)) -> JS
             game_version=server.game_version,
             loader=server.loader,
             modrinth_projects=server.modrinth_projects,
+            db=db,  # Pass database session for validation
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions (compatibility validation failures)
+        raise
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 

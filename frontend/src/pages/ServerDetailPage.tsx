@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useServer } from '@/lib/hooks/useServer';
 import { useStartServer } from '@/lib/hooks/useStartServer';
@@ -11,9 +11,18 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X, Edit } from 'lucide-react';
+import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X, Edit, ExternalLink } from 'lucide-react';
 import { ServerLogs } from '@/components/servers/ServerLogs';
 import { EditServerDialog } from '@/components/servers/EditServerDialog';
+import { getModrinthProjects } from '@/lib/api/modrinth';
+import type { ModrinthProjectInfo } from '@/lib/api/types';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 export function ServerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +35,20 @@ export function ServerDetailPage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [modrinthProjects, setModrinthProjects] = useState<ModrinthProjectInfo[]>([]);
+
+  useEffect(() => {
+    if (server?.modrinth_projects && server.modrinth_projects.length > 0) {
+      getModrinthProjects(server.modrinth_projects)
+        .then(setModrinthProjects)
+        .catch((err) => {
+          console.error('Failed to fetch enriched project metadata:', err);
+          setModrinthProjects([]);
+        });
+    } else {
+      setModrinthProjects([]);
+    }
+  }, [server?.id, server?.modrinth_projects]);
 
   const handleStartEdit = () => {
     setEditedName(server?.name || '');
@@ -196,6 +219,11 @@ export function ServerDetailPage() {
           <CardDescription>
             <Badge variant="secondary" className="mr-2">{server.loader}</Badge>
             <span>{server.game_version}</span>
+            {server.modrinth_projects && server.modrinth_projects.length > 0 && (
+              <Badge variant="outline" className="ml-2">
+                {server.modrinth_projects.length} {server.modrinth_projects.length === 1 ? 'mod' : 'mods'}
+              </Badge>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col overflow-hidden space-y-6">
@@ -215,6 +243,45 @@ export function ServerDetailPage() {
                 <h3 className="text-sm font-medium text-muted-foreground">Game Version</h3>
                 <p>{server.game_version}</p>
               </div>
+
+              {modrinthProjects.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-muted-foreground">Mods</h3>
+                  <TooltipProvider>
+                    <div className="flex flex-wrap gap-2">
+                      {modrinthProjects.map((project) => {
+                        const modrinthUrl = `https://modrinth.com/mod/${project.project_id}`;
+
+                        return (
+                          <Tooltip key={project.project_id}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={cn(
+                                  'px-2 py-1 rounded-md text-xs bg-secondary text-secondary-foreground cursor-default'
+                                )}
+                              >
+                                <span>{project.title}</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <a
+                                href={modrinthUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                Modrinth
+                              </a>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  </TooltipProvider>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col overflow-hidden">
