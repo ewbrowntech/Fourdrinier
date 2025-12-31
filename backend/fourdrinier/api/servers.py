@@ -55,6 +55,11 @@ async def create_server(server_input: ServerCreate, db: AsyncSession = Depends(g
         "game_version": server.game_version,
         "modrinth_projects": server.modrinth_projects,
         "status": "created",  # New servers start in created state
+        "cpu_request": server.cpu_request,
+        "cpu_limit": server.cpu_limit,
+        "memory_request": server.memory_request,
+        "memory_limit": server.memory_limit,
+        "pvc_size": server.pvc_size,
     }
 
 
@@ -76,6 +81,11 @@ async def list_servers(db: AsyncSession = Depends(get_db)) -> list[dict]:
             "game_version": server.game_version,
             "modrinth_projects": server.modrinth_projects,
             "status": status,
+            "cpu_request": server.cpu_request,
+            "cpu_limit": server.cpu_limit,
+            "memory_request": server.memory_request,
+            "memory_limit": server.memory_limit,
+            "pvc_size": server.pvc_size,
         }
         servers_with_status.append(server_dict)
 
@@ -101,6 +111,11 @@ async def get_server(server_id: str, db: AsyncSession = Depends(get_db)) -> dict
         "game_version": server.game_version,
         "modrinth_projects": server.modrinth_projects,
         "status": status,
+        "cpu_request": server.cpu_request,
+        "cpu_limit": server.cpu_limit,
+        "memory_request": server.memory_request,
+        "memory_limit": server.memory_limit,
+        "pvc_size": server.pvc_size,
     }
 
 
@@ -109,14 +124,32 @@ async def update_server(
     server_id: str, server_update: ServerUpdate, db: AsyncSession = Depends(get_db)
 ) -> dict:
     """
-    Update a server's details
+    Update a server's details.
+    Resource changes (CPU/memory) only allowed when server is stopped or created.
     """
     try:
-        server: Server = await crud.update_server(db, server_id, server_update)
+        server: Server = await crud.get_server(db, server_id)
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    # Enrich with Kubernetes status
+    # Check if resource fields are being updated
+    resource_fields = ["cpu_request", "cpu_limit", "memory_request", "memory_limit"]
+    update_dict = server_update.model_dump(exclude_unset=True)
+    resource_update_attempted = any(field in update_dict for field in resource_fields)
+
+    # If resources are being updated, validate server is stopped
+    if resource_update_attempted:
+        status = await get_server_status(server.id, server.name)
+        if status not in ["stopped", "created"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot update resources while server is {status}. Please stop the server first.",
+            )
+
+    # Proceed with update
+    server = await crud.update_server(db, server_id, server_update)
+
+    # Return response with all fields
     status = await get_server_status(server.id, server.name)
     return {
         "id": server.id,
@@ -125,6 +158,11 @@ async def update_server(
         "game_version": server.game_version,
         "modrinth_projects": server.modrinth_projects,
         "status": status,
+        "cpu_request": server.cpu_request,
+        "cpu_limit": server.cpu_limit,
+        "memory_request": server.memory_request,
+        "memory_limit": server.memory_limit,
+        "pvc_size": server.pvc_size,
     }
 
 
@@ -309,6 +347,12 @@ async def start_server(server_id: str, db: AsyncSession = Depends(get_db)) -> JS
             loader=server.loader,
             modrinth_projects=server.modrinth_projects,
             db=db,  # Pass database session for validation
+            # Pass per-server resources
+            cpu_request=server.cpu_request,
+            cpu_limit=server.cpu_limit,
+            memory_request=server.memory_request,
+            memory_limit=server.memory_limit,
+            pvc_size=server.pvc_size,
         )
     except HTTPException:
         # Re-raise HTTP exceptions (compatibility validation failures)

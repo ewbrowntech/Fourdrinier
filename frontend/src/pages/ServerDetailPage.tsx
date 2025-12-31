@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useServer } from '@/lib/hooks/useServer';
 import { useStartServer } from '@/lib/hooks/useStartServer';
@@ -11,18 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X, Edit, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X } from 'lucide-react';
 import { ServerLogs } from '@/components/servers/ServerLogs';
-import { EditServerDialog } from '@/components/servers/EditServerDialog';
-import { getModrinthProjects } from '@/lib/api/modrinth';
-import type { ModrinthProjectInfo } from '@/lib/api/types';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+import { InlineModrinthEditor } from '@/components/servers/InlineModrinthEditor';
+import { InlineResourceEditor } from '@/components/servers/InlineResourceEditor';
 
 export function ServerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,21 +26,6 @@ export function ServerDetailPage() {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [modrinthProjects, setModrinthProjects] = useState<ModrinthProjectInfo[]>([]);
-
-  useEffect(() => {
-    if (server?.modrinth_projects && server.modrinth_projects.length > 0) {
-      getModrinthProjects(server.modrinth_projects)
-        .then(setModrinthProjects)
-        .catch((err) => {
-          console.error('Failed to fetch enriched project metadata:', err);
-          setModrinthProjects([]);
-        });
-    } else {
-      setModrinthProjects([]);
-    }
-  }, [server?.id, server?.modrinth_projects]);
 
   const handleStartEdit = () => {
     setEditedName(server?.name || '');
@@ -244,44 +221,34 @@ export function ServerDetailPage() {
                 <p>{server.game_version}</p>
               </div>
 
-              {modrinthProjects.length > 0 && (
+              {server.loader === 'fabric' && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium text-muted-foreground">Mods</h3>
-                  <TooltipProvider>
-                    <div className="flex flex-wrap gap-2">
-                      {modrinthProjects.map((project) => {
-                        const modrinthUrl = `https://modrinth.com/mod/${project.project_id}`;
-
-                        return (
-                          <Tooltip key={project.project_id}>
-                            <TooltipTrigger asChild>
-                              <div
-                                className={cn(
-                                  'px-2 py-1 rounded-md text-xs bg-secondary text-secondary-foreground cursor-default'
-                                )}
-                              >
-                                <span>{project.title}</span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <a
-                                href={modrinthUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1 text-xs hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                                Modrinth
-                              </a>
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      })}
-                    </div>
-                  </TooltipProvider>
+                  <InlineModrinthEditor
+                    server={server}
+                    onUpdate={(projects) =>
+                      updateServerMutation.mutate({
+                        serverId: server.id,
+                        data: { name: server.name, modrinth_projects: projects },
+                      })
+                    }
+                  />
                 </div>
               )}
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-muted-foreground">Resources</h3>
+                <InlineResourceEditor
+                  server={server}
+                  canEdit={server.status === 'stopped' || server.status === 'created'}
+                  onUpdate={(resources) =>
+                    updateServerMutation.mutate({
+                      serverId: server.id,
+                      data: { name: server.name, ...resources },
+                    })
+                  }
+                />
+              </div>
             </div>
 
             <div className="flex flex-col overflow-hidden">
@@ -298,10 +265,6 @@ export function ServerDetailPage() {
               <Square className="h-4 w-4 mr-2" />
               {stopServerMutation.isPending ? 'Stopping...' : 'Stop Server'}
             </Button>
-            <Button onClick={() => setEditDialogOpen(true)} variant="outline" disabled={isActionPending}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Server
-            </Button>
             <Button onClick={handleDelete} variant="destructive" disabled={isActionPending}>
               <Trash2 className="h-4 w-4 mr-2" />
               {deleteServerMutation.isPending ? 'Deleting...' : 'Delete Server'}
@@ -309,11 +272,6 @@ export function ServerDetailPage() {
           </div>
         </CardContent>
       </Card>
-      <EditServerDialog
-        server={server}
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-      />
     </div>
   );
 }

@@ -109,6 +109,12 @@ async def start_container(
     loader: str = "paper",
     modrinth_projects: list[str] | None = None,
     db: AsyncSession | None = None,
+    # Per-server resource allocation (optional, defaults to global config)
+    cpu_request: str | None = None,
+    cpu_limit: str | None = None,
+    memory_request: str | None = None,
+    memory_limit: str | None = None,
+    pvc_size: str | None = None,
 ) -> str:
     """
     Start a Minecraft server as a Kubernetes Pod with PVC and LoadBalancer Service
@@ -120,6 +126,11 @@ async def start_container(
         loader: Server loader type (paper, vanilla, forge, fabric)
         modrinth_projects: List of Modrinth project slugs/IDs for mod installation
         db: Database session for compatibility validation (required for Fabric servers)
+        cpu_request: CPU request (e.g., "1000m"), defaults to global config
+        cpu_limit: CPU limit (e.g., "2000m"), defaults to global config
+        memory_request: Memory request (e.g., "2Gi"), defaults to global config
+        memory_limit: Memory limit (e.g., "4Gi"), defaults to global config
+        pvc_size: PVC size (e.g., "5Gi"), defaults to global config
 
     Returns:
         Pod name (equivalent to container ID in Docker)
@@ -128,6 +139,12 @@ async def start_container(
         RuntimeError: If resource creation fails
         HTTPException: If incompatible mods are detected (400)
     """
+    # Use per-server resources or fall back to global config
+    final_cpu_request = cpu_request or MINECRAFT_CPU_REQUEST
+    final_cpu_limit = cpu_limit or MINECRAFT_CPU_LIMIT
+    final_memory_request = memory_request or MINECRAFT_MEMORY_REQUEST
+    final_memory_limit = memory_limit or MINECRAFT_MEMORY_LIMIT
+    final_pvc_size = pvc_size or MINECRAFT_PVC_SIZE
     # CRITICAL: Validate modrinth projects compatibility BEFORE creating any resources
     if loader == "fabric" and modrinth_projects and db:
         from fourdrinier.db.models import Server
@@ -191,7 +208,7 @@ async def start_container(
                 spec=client.V1PersistentVolumeClaimSpec(
                     access_modes=["ReadWriteOnce"],
                     storage_class_name=MINECRAFT_STORAGE_CLASS,
-                    resources=client.V1ResourceRequirements(requests={"storage": MINECRAFT_PVC_SIZE}),
+                    resources=client.V1ResourceRequirements(requests={"storage": final_pvc_size}),
                 ),
             )
 
@@ -211,6 +228,18 @@ async def start_container(
             client.V1EnvVar(name="VERSION", value=game_version),
             client.V1EnvVar(name="MOTD", value="A Fourdrinier Server"),
         ]
+
+        # Set JVM memory using INIT_MEMORY and MAX_MEMORY for separate control
+        # The Minecraft Docker image supports these for -Xms and -Xmx respectively
+        if final_memory_request:
+            # Convert Kubernetes format (e.g., "8Gi") to Docker image format (e.g., "8G")
+            init_memory = final_memory_request.replace("i", "")  # 8Gi -> 8G
+            env_vars.append(client.V1EnvVar(name="INIT_MEMORY", value=init_memory))
+
+        if final_memory_limit:
+            # Convert Kubernetes format (e.g., "16Gi") to Docker image format (e.g., "16G")
+            max_memory = final_memory_limit.replace("i", "")  # 16Gi -> 16G
+            env_vars.append(client.V1EnvVar(name="MAX_MEMORY", value=max_memory))
 
         # Add Fabric + Modrinth configuration if applicable
         if loader == "fabric" and modrinth_projects:
@@ -241,12 +270,12 @@ async def start_container(
                         volume_mounts=[client.V1VolumeMount(name="data", mount_path="/data")],
                         resources=client.V1ResourceRequirements(
                             requests={
-                                "cpu": MINECRAFT_CPU_REQUEST,
-                                "memory": MINECRAFT_MEMORY_REQUEST,
+                                "cpu": final_cpu_request,
+                                "memory": final_memory_request,
                             },
                             limits={
-                                "cpu": MINECRAFT_CPU_LIMIT,
-                                "memory": MINECRAFT_MEMORY_LIMIT,
+                                "cpu": final_cpu_limit,
+                                "memory": final_memory_limit,
                             },
                         ),
                         stdin=True,

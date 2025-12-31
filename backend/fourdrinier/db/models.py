@@ -24,3 +24,10 @@ class Server(Base):
     loader: Mapped[str]
     game_version: Mapped[str]
     modrinth_projects: Mapped[list[str] | None] = mapped_column(JSON, default=None)
+
+    # Per-server resource allocation (nullable - falls back to global config)
+    cpu_request: Mapped[str | None] = mapped_column(default=None)
+    cpu_limit: Mapped[str | None] = mapped_column(default=None)
+    memory_request: Mapped[str | None] = mapped_column(default=None)
+    memory_limit: Mapped[str | None] = mapped_column(default=None)
+    pvc_size: Mapped[str | None] = mapped_column(default=None)

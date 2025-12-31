@@ -5,6 +5,13 @@ export interface Server {
   game_version: string;
   modrinth_projects?: string[] | null;
   status: 'running' | 'pending' | 'stopped' | 'created' | 'error';
+
+  // Resource allocation
+  cpu_request?: string | null;
+  cpu_limit?: string | null;
+  memory_request?: string | null;
+  memory_limit?: string | null;
+  pvc_size?: string | null;
 }
 
 export interface CreateServerInput {
@@ -12,11 +19,25 @@ export interface CreateServerInput {
   loader?: string;
   game_version: string;
   modrinth_projects?: string[] | null;
+
+  // Resource allocation
+  cpu_request?: string | null;
+  cpu_limit?: string | null;
+  memory_request?: string | null;
+  memory_limit?: string | null;
+  pvc_size?: string | null;
 }
 
 export interface UpdateServerInput {
   name: string;
   modrinth_projects?: string[] | null;
+
+  // Resource allocation (can only be updated when server is stopped)
+  // Note: pvc_size NOT included - cannot be changed after creation
+  cpu_request?: string | null;
+  cpu_limit?: string | null;
+  memory_request?: string | null;
+  memory_limit?: string | null;
 }
 
 export interface StartServerResponse {
