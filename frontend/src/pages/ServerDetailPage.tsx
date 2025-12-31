@@ -5,13 +5,14 @@ import { useStartServer } from '@/lib/hooks/useStartServer';
 import { useStopServer } from '@/lib/hooks/useStopServer';
 import { useDeleteServer } from '@/lib/hooks/useDeleteServer';
 import { useUpdateServer } from '@/lib/hooks/useUpdateServer';
+import { exportServerAsMrpack } from '@/lib/api/servers';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X } from 'lucide-react';
+import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X, Download } from 'lucide-react';
 import { ServerLogs } from '@/components/servers/ServerLogs';
 import { InlineModrinthEditor } from '@/components/servers/InlineModrinthEditor';
 import { InlineResourceEditor } from '@/components/servers/InlineResourceEditor';
@@ -49,6 +50,7 @@ export function ServerDetailPage() {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleStartEdit = () => {
     setEditedName(server?.name || '');
@@ -88,6 +90,20 @@ export function ServerDetailPage() {
   const handleDelete = () => {
     if (id && window.confirm(`Are you sure you want to delete "${server?.name}"? This will remove all server data.`)) {
       deleteServerMutation.mutate(id);
+    }
+  };
+
+  const handleExportMrpack = async () => {
+    if (!id) return;
+
+    setIsExporting(true);
+    try {
+      await exportServerAsMrpack(id);
+    } catch (error: any) {
+      console.error('Failed to export modpack:', error);
+      alert(error.response?.data?.detail || 'Failed to export server modpack');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -322,6 +338,14 @@ export function ServerDetailPage() {
             <Button onClick={handleStop} variant="secondary" disabled={isActionPending || !canStop}>
               <Square className="h-4 w-4 mr-2" />
               {stopServerMutation.isPending ? 'Stopping...' : 'Stop Server'}
+            </Button>
+            <Button
+              onClick={handleExportMrpack}
+              variant="outline"
+              disabled={isExporting || !server.modrinth_projects || server.modrinth_projects.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isExporting ? 'Exporting...' : 'Export .mrpack'}
             </Button>
             <Button onClick={handleDelete} variant="destructive" disabled={isActionPending}>
               <Trash2 className="h-4 w-4 mr-2" />

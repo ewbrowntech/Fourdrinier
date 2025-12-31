@@ -57,3 +57,31 @@ export async function importCollection(id: string, collectionUrl: string): Promi
   );
   return response.data;
 }
+
+export async function exportServerAsMrpack(id: string): Promise<void> {
+  const response = await apiClient.get(`/servers/${id}/export-mrpack`, {
+    responseType: 'blob',
+  });
+
+  // Extract filename from Content-Disposition header or use default
+  const contentDisposition = response.headers['content-disposition'];
+  let filename = `server-${id}.mrpack`;
+
+  if (contentDisposition) {
+    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+    if (matches != null && matches[1]) {
+      filename = matches[1].replace(/['"]/g, '');
+    }
+  }
+
+  // Create blob and trigger download
+  const blob = new Blob([response.data], { type: 'application/x-modrinth-modpack+zip' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}

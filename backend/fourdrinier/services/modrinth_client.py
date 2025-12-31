@@ -217,3 +217,137 @@ async def get_multiple_projects_metadata(project_ids: list[str]) -> dict[str, di
                     metadata_dict[project_id] = None
 
     return metadata_dict
+
+
+async def get_project_versions(
+    project_id: str,
+    game_versions: list[str] | None = None,
+    loaders: list[str] | None = None,
+) -> list[dict]:
+    """
+    Fetch versions for a project from Modrinth API v2.
+
+    Args:
+        project_id: Modrinth project slug or ID
+        game_versions: List of game versions to filter by (e.g., ["1.20.1"])
+        loaders: List of loaders to filter by (e.g., ["fabric"])
+
+    Returns:
+        List of version objects sorted by date_published (newest first)
+        Each version contains: id, name, version_number, files[], game_versions, loaders
+
+    Raises:
+        httpx.HTTPStatusError: If Modrinth API request fails
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            params = {}
+            if game_versions:
+                params["game_versions"] = json.dumps(game_versions)
+            if loaders:
+                params["loaders"] = json.dumps(loaders)
+
+            response = await client.get(
+                f"https://api.modrinth.com/v2/project/{project_id}/version",
+                params=params,
+                headers={
+                    "User-Agent": "Fourdrinier/1.0 (minecraft server manager)"
+                },
+                timeout=10.0
+            )
+
+            if response.status_code == 404:
+                logger.warning(f"Project {project_id} not found on Modrinth")
+                return []
+
+            response.raise_for_status()
+            versions = response.json()
+
+            return versions
+    except httpx.TimeoutException:
+        logger.error(f"Timeout fetching versions for project {project_id}")
+        return []
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            logger.warning(f"Rate limited by Modrinth API for project {project_id}")
+        raise
+
+
+async def get_latest_versions_batch(
+    projects: list[dict],
+    game_version: str,
+    loader: str,
+) -> dict[str, dict | None]:
+    """
+    Batch fetch latest compatible versions for multiple projects.
+
+    Uses highly concurrent requests to efficiently fetch versions for many projects.
+    Modrinth's API can handle high concurrency, so we use 100 concurrent requests
+    for optimal performance with large modpacks.
+
+    Args:
+        projects: List of project dicts with 'id' and 'type' keys
+        game_version: Target Minecraft version (e.g., "1.20.1")
+        loader: Target loader (e.g., "fabric")
+
+    Returns:
+        Dict mapping project_id -> version dict (or None if not found)
+        Version dict contains: files[], version_number, name, etc.
+    """
+    if not projects:
+        return {}
+
+    # Use high concurrency (100 at a time) - Modrinth can handle this
+    # For 200 mods, this means only ~2 batches instead of 20
+    semaphore = asyncio.Semaphore(100)
+
+    async def fetch_latest_version(project: dict) -> tuple[str, dict | None]:
+        """Fetch latest version for a single project"""
+        project_id = project.get("id")
+        project_type = project.get("type", "mod")
+
+        async with semaphore:
+            try:
+                # For mods, filter by both loader and game version
+                # For other types, only filter by game version (loader-agnostic)
+                loaders = [loader] if project_type == "mod" else None
+
+                versions = await get_project_versions(
+                    project_id,
+                    game_versions=[game_version],
+                    loaders=loaders
+                )
+
+                if not versions:
+                    logger.warning(f"No compatible versions found for {project_id}")
+                    return (project_id, None)
+
+                # Return the first (most recent) version
+                latest_version = versions[0]
+                return (project_id, latest_version)
+
+            except Exception as e:
+                logger.error(f"Failed to fetch version for {project_id}: {e}")
+                return (project_id, None)
+
+    # Fetch all versions concurrently (limited by semaphore)
+    # With 100 concurrent requests, 200 mods takes ~2 seconds
+    logger.info(f"Fetching {len(projects)} project versions with 100 concurrent requests...")
+    results = await asyncio.gather(
+        *[fetch_latest_version(project) for project in projects],
+        return_exceptions=True
+    )
+
+    # Build result dictionary
+    versions_dict = {}
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"Exception during batch version fetch: {result}")
+            continue
+        project_id, version = result
+        versions_dict[project_id] = version
+
+    successful = sum(1 for v in versions_dict.values() if v is not None)
+    logger.info(f"Successfully fetched {successful}/{len(projects)} project versions")
+
+    return versions_dict

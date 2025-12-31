@@ -10,12 +10,17 @@ All rights reserved. This file is part of the Fourdrinier project and is release
 the GPLv3 License. See the LICENSE file for more details.
 """
 
+import io
+import json
 import logging
+from datetime import datetime
+from zipfile import ZipFile, ZIP_DEFLATED
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +44,7 @@ from fourdrinier.dependencies.deploy.start_container import stop_container
 from fourdrinier.dependencies.deploy.start_container import stream_server_logs
 from fourdrinier.services.modrinth_client import get_collection_projects
 from fourdrinier.services.modrinth_client import get_multiple_projects_metadata
+from fourdrinier.services.modrinth_client import get_latest_versions_batch
 from fourdrinier.services.compatibility_validator import validate_server_modrinth_projects
 
 
@@ -479,3 +485,185 @@ async def get_server_logs(server_id: str):
         )
     except RuntimeError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/{server_id}/export-mrpack")
+async def export_server_as_mrpack(
+    server_id: str,
+    db: AsyncSession = Depends(get_db)
+) -> Response:
+    """
+    Export server configuration as a Modrinth modpack (.mrpack file).
+
+    Generates a .mrpack file containing:
+    - modrinth.index.json with server mods/datapacks
+    - File hashes and download URLs for each project
+
+    Only includes mods and datapacks (client-side content like shaders/resourcepacks excluded).
+    Uses latest compatible versions for server's loader and game version.
+    """
+    # Get server
+    try:
+        server: Server = await crud.get_server(db, server_id)
+    except NoResultFound:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Get modrinth projects
+    project_list = server.modrinth_projects or []
+    if not project_list:
+        raise HTTPException(
+            status_code=400,
+            detail="Server has no Modrinth projects to export"
+        )
+
+    # Filter to only include server-side content (mods, datapacks, plugins)
+    # Exclude client-side content (shaders, resourcepacks)
+    server_side_projects = []
+    for project_entry in project_list:
+        if isinstance(project_entry, dict):
+            project_type = project_entry.get("type", "mod")
+            if project_type in ["mod", "datapack", "plugin"]:
+                server_side_projects.append(project_entry)
+        elif isinstance(project_entry, str):
+            # Legacy format - treat as mod
+            server_side_projects.append({"id": project_entry, "type": "mod"})
+
+    if not server_side_projects:
+        raise HTTPException(
+            status_code=400,
+            detail="Server has no server-side Modrinth projects to export"
+        )
+
+    # Fetch latest versions for all projects (batched with rate limiting)
+    logger.info(f"Fetching versions for {len(server_side_projects)} projects")
+    versions_dict = await get_latest_versions_batch(
+        server_side_projects,
+        server.game_version,
+        server.loader
+    )
+
+    # Build files array for modrinth.index.json
+    files = []
+    skipped_projects = []
+
+    for project in server_side_projects:
+        project_id = project.get("id")
+        project_type = project.get("type", "mod")
+        version = versions_dict.get(project_id)
+
+        if not version:
+            skipped_projects.append(project_id)
+            logger.warning(f"No compatible version found for {project_id}")
+            continue
+
+        # Get the primary file from the version
+        version_files = version.get("files", [])
+        if not version_files:
+            skipped_projects.append(project_id)
+            logger.warning(f"No files found for {project_id} version {version.get('version_number')}")
+            continue
+
+        # Find primary file
+        primary_file = next(
+            (f for f in version_files if f.get("primary", False)),
+            version_files[0]  # Fallback to first file
+        )
+
+        # Determine path based on project type
+        filename = primary_file.get("filename", f"{project_id}.jar")
+        if project_type == "datapack":
+            path = f"datapacks/{filename}"
+        elif project_type == "plugin":
+            path = f"plugins/{filename}"
+        else:  # mod
+            path = f"mods/{filename}"
+
+        # Extract hashes
+        hashes_obj = primary_file.get("hashes", {})
+        if not hashes_obj.get("sha1") or not hashes_obj.get("sha512"):
+            skipped_projects.append(project_id)
+            logger.warning(f"Missing hashes for {project_id}")
+            continue
+
+        # Build file entry
+        file_entry = {
+            "path": path,
+            "hashes": {
+                "sha1": hashes_obj["sha1"],
+                "sha512": hashes_obj["sha512"]
+            },
+            "downloads": [primary_file.get("url")],
+            "fileSize": primary_file.get("size", 0)
+        }
+
+        # Add environment info for non-mod types
+        if project_type == "datapack":
+            file_entry["env"] = {
+                "client": "optional",
+                "server": "required"
+            }
+        elif project_type == "plugin":
+            file_entry["env"] = {
+                "client": "unsupported",
+                "server": "required"
+            }
+        else:  # mod
+            file_entry["env"] = {
+                "client": "optional",
+                "server": "required"
+            }
+
+        files.append(file_entry)
+
+    if not files:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch versions for any projects. Skipped: {', '.join(skipped_projects)}"
+        )
+
+    # Determine loader ID for dependencies
+    loader_key_map = {
+        "fabric": "fabric-loader",
+        "forge": "forge",
+        "neoforge": "neoforge",
+        "quilt": "quilt-loader",
+        "paper": "paper",
+        "spigot": "spigot",
+    }
+    loader_key = loader_key_map.get(server.loader.lower(), server.loader.lower())
+
+    # Build modrinth.index.json
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    index_data = {
+        "formatVersion": 1,
+        "game": "minecraft",
+        "versionId": f"{server_id}-{timestamp}",
+        "name": server.name,
+        "summary": f"Exported from Fourdrinier on {datetime.utcnow().strftime('%Y-%m-%d')}",
+        "files": files,
+        "dependencies": {
+            "minecraft": server.game_version,
+            loader_key: "*"  # Accept any loader version
+        }
+    }
+
+    # Create ZIP file in memory
+    zip_buffer = io.BytesIO()
+    with ZipFile(zip_buffer, 'w', ZIP_DEFLATED) as zip_file:
+        # Add modrinth.index.json
+        index_json = json.dumps(index_data, indent=2)
+        zip_file.writestr("modrinth.index.json", index_json)
+
+    # Prepare response
+    zip_buffer.seek(0)
+    filename = f"{server.name.replace(' ', '-')}-{timestamp}.mrpack"
+
+    logger.info(f"Generated .mrpack with {len(files)} files. Skipped: {len(skipped_projects)}")
+
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/x-modrinth-modpack+zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
