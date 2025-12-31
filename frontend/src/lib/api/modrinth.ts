@@ -11,6 +11,7 @@ type ModrinthProjectResponse = {
   icon_url?: string | null;
   game_versions?: string[];
   loaders?: string[];
+  project_types?: string[]; // Modrinth API v3 uses plural array, not singular string
 };
 
 function chunkProjectIds(projectIds: string[]): string[][] {
@@ -24,12 +25,13 @@ function chunkProjectIds(projectIds: string[]): string[][] {
 function checkCompatibility(
   project: ModrinthProjectResponse,
   gameVersion: string,
-  loader: string
+  loader: string,
+  projectType: string = 'mod'
 ): { compatible: boolean; warnings: string[] } {
   const warnings: string[] = [];
   let compatible = true;
 
-  // Check game version compatibility
+  // Check game version compatibility (required for ALL project types)
   const gameVersions = project.game_versions || [];
   if (gameVersions.length > 0 && !gameVersions.includes(gameVersion)) {
     compatible = false;
@@ -37,18 +39,41 @@ function checkCompatibility(
     warnings.push(`Supports versions: ${supportedVersions}`);
   }
 
-  // Check loader compatibility
-  const loaders = project.loaders || [];
-  if (loaders.length > 0) {
-    const normalizedLoader = loader.toLowerCase();
-    const normalizedLoaders = loaders.map((l) => l.toLowerCase());
-    if (!normalizedLoaders.includes(normalizedLoader)) {
-      compatible = false;
-      warnings.push(`Supports loaders: ${loaders.join(', ')}`);
+  // Check loader compatibility (ONLY for mods)
+  // Datapacks, shaders, resourcepacks, and plugins are loader-agnostic
+  if (projectType === 'mod') {
+    const loaders = project.loaders || [];
+    if (loaders.length > 0) {
+      const normalizedLoader = loader.toLowerCase();
+      const normalizedLoaders = loaders.map((l) => l.toLowerCase());
+      if (!normalizedLoaders.includes(normalizedLoader)) {
+        compatible = false;
+        warnings.push(`Supports loaders: ${loaders.join(', ')}`);
+      }
     }
   }
 
   return { compatible, warnings };
+}
+
+function selectBestProjectType(projectTypes: string[], loader: string): string {
+  if (!projectTypes || projectTypes.length === 0) {
+    return 'mod';
+  }
+
+  // If only one type, use it
+  if (projectTypes.length === 1) {
+    return projectTypes[0];
+  }
+
+  // If multiple types and loader is Fabric/Forge, prefer mod over datapack
+  const normalizedLoader = loader.toLowerCase();
+  if ((normalizedLoader === 'fabric' || normalizedLoader === 'forge') && projectTypes.includes('mod')) {
+    return 'mod';
+  }
+
+  // Otherwise, use first type
+  return projectTypes[0];
 }
 
 function toProjectEnriched(
@@ -56,7 +81,10 @@ function toProjectEnriched(
   gameVersion: string,
   loader: string
 ): ModrinthProjectEnriched {
-  const { compatible, warnings } = checkCompatibility(project, gameVersion, loader);
+  // Extract project_type from project_types array (Modrinth v3 returns an array)
+  const projectTypes = project.project_types || ['mod'];
+  const projectType = selectBestProjectType(projectTypes, loader) as 'mod' | 'datapack' | 'shader' | 'resourcepack' | 'plugin';
+  const { compatible, warnings } = checkCompatibility(project, gameVersion, loader, projectType);
 
   return {
     project_id: project.id,
@@ -66,6 +94,7 @@ function toProjectEnriched(
     icon_url: project.icon_url ?? null,
     compatible,
     warnings,
+    project_type: projectType,
   };
 }
 

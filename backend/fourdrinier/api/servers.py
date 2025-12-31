@@ -10,6 +10,7 @@ All rights reserved. This file is part of the Fourdrinier project and is release
 the GPLv3 License. See the LICENSE file for more details.
 """
 
+import logging
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -17,6 +18,8 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from fourdrinier.db import crud
 from fourdrinier.db.models import Server
@@ -180,10 +183,27 @@ async def get_server_modrinth_projects(
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    project_ids = list(server.modrinth_projects or [])
+    project_list = server.modrinth_projects or []
     # If no modrinth_projects, return empty list
-    if not project_ids:
+    if not project_list:
         return []
+
+    # Extract project IDs and types (handle both old and new formats)
+    project_ids = []
+    project_types = {}  # Map project_id -> project_type
+
+    for project_entry in project_list:
+        if isinstance(project_entry, str):
+            # Old format: simple string
+            project_ids.append(project_entry)
+            project_types[project_entry] = "mod"  # Default for backward compatibility
+        elif isinstance(project_entry, dict):
+            # New format: {"id": "...", "type": "..."}
+            project_id = project_entry.get("id")
+            project_type = project_entry.get("type", "mod")
+            if project_id:
+                project_ids.append(project_id)
+                project_types[project_id] = project_type
 
     # Fetch metadata for all projects from Modrinth API
     projects_metadata = await get_multiple_projects_metadata(project_ids)
@@ -193,6 +213,7 @@ async def get_server_modrinth_projects(
 
     for project_id in project_ids:
         metadata = projects_metadata.get(project_id)
+        project_type = project_types.get(project_id, "mod")
 
         if metadata is None:
             # Project not found
@@ -203,13 +224,14 @@ async def get_server_modrinth_projects(
                 "icon_url": None,
                 "compatible": False,
                 "warnings": ["Project not found on Modrinth"],
+                "project_type": project_type,
             })
             continue
 
-        # Check compatibility
+        # Check compatibility (with project type awareness)
         from fourdrinier.services.compatibility_validator import check_project_compatibility
         compatible, warnings = check_project_compatibility(
-            metadata, server.game_version, server.loader
+            metadata, server.game_version, server.loader, project_type
         )
 
         enriched_projects.append({
@@ -219,6 +241,7 @@ async def get_server_modrinth_projects(
             "icon_url": metadata.get("icon_url"),
             "compatible": compatible,
             "warnings": warnings,
+            "project_type": project_type,  # Include type from database
         })
 
     return enriched_projects
@@ -275,15 +298,71 @@ async def import_modrinth_collection(
 
     # Fetch projects from Modrinth collection
     try:
-        new_projects = await get_collection_projects(collection_url)
+        new_project_ids = await get_collection_projects(collection_url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch collection from Modrinth: {str(e)}")
 
-    # Merge with existing projects (deduplicate)
+    # Fetch metadata to auto-detect project types
+    projects_metadata = await get_multiple_projects_metadata(new_project_ids)
+
+    # Helper function to select best project type based on loader
+    def select_best_project_type(project_types: list[str], loader: str) -> str:
+        """
+        Select the best project type based on available types and loader.
+
+        If a project is available as both mod and datapack, prefer mod for Fabric/Forge loaders.
+        """
+        if not project_types:
+            return "mod"
+
+        # If only one type, use it
+        if len(project_types) == 1:
+            return project_types[0]
+
+        # If multiple types and loader is Fabric/Forge, prefer mod over datapack
+        if loader.lower() in ["fabric", "forge"] and "mod" in project_types:
+            return "mod"
+
+        # Otherwise, use first type
+        return project_types[0]
+
+    # Convert to structured format with types
+    new_projects_structured = []
+    for project_id in new_project_ids:
+        metadata = projects_metadata.get(project_id)
+        project_type = "mod"  # Default
+
+        if metadata:
+            # Use smart type selection if project_types array is available
+            project_types = metadata.get("project_types", [metadata.get("project_type", "mod")])
+            project_type = select_best_project_type(project_types, server.loader)
+
+        new_projects_structured.append({
+            "id": project_id,
+            "type": project_type
+        })
+
+    # Merge with existing projects (deduplicate by project ID)
     existing_projects = server.modrinth_projects or []
-    combined_projects = list(set(existing_projects + new_projects))
+
+    # Convert existing to dict for deduplication
+    existing_dict = {}
+    for entry in existing_projects:
+        if isinstance(entry, str):
+            existing_dict[entry] = {"id": entry, "type": "mod"}
+        elif isinstance(entry, dict):
+            project_id = entry.get("id")
+            if project_id:
+                existing_dict[project_id] = entry
+
+    # Add new projects (overwrites if same ID)
+    for project in new_projects_structured:
+        existing_dict[project["id"]] = project
+
+    # Convert back to list
+    combined_projects = list(existing_dict.values())
 
     # Update server
     server.modrinth_projects = combined_projects
@@ -294,9 +373,9 @@ async def import_modrinth_collection(
     validation_result = await validate_server_modrinth_projects(server, db)
 
     return ImportCollectionResponse(
-        message=f"Imported {len(new_projects)} projects from collection",
+        message=f"Imported {len(new_projects_structured)} projects from collection",
         projects=combined_projects,
-        new_count=len(new_projects),
+        new_count=len(new_projects_structured),
         total_count=len(combined_projects),
         warnings=validation_result["warnings"],
         incompatible_projects=[

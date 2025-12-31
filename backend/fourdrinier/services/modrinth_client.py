@@ -10,6 +10,7 @@ the GPLv3 License. See the LICENSE file for more details.
 
 import asyncio
 import httpx
+import json
 import re
 from typing import List
 import logging
@@ -85,7 +86,7 @@ async def get_project_metadata(project_id: str) -> dict | None:
         project_id: Modrinth project slug or ID
 
     Returns:
-        dict with keys: title, description, icon_url, game_versions, loaders
+        dict with keys: title, description, icon_url, game_versions, loaders, project_type
         None if project not found or API error
 
     Raises:
@@ -108,12 +109,21 @@ async def get_project_metadata(project_id: str) -> dict | None:
             response.raise_for_status()
             data = response.json()
 
+            # Extract project_type from project_types array (Modrinth v3 returns an array)
+            project_types = data.get("project_types", ["mod"])
+            project_type = project_types[0] if project_types else "mod"
+
+            # Modrinth v3 uses "name" not "title"
+            title = data.get("name", project_id)
+
             return {
-                "title": data.get("title", project_id),
+                "title": title,
                 "description": data.get("description", ""),
                 "icon_url": data.get("icon_url"),
                 "game_versions": data.get("game_versions", []),
                 "loaders": data.get("loaders", []),
+                "project_type": project_type,
+                "project_types": project_types,  # Include full array for smart type selection
             }
     except httpx.TimeoutException:
         logger.error(f"Timeout fetching metadata for project {project_id}")
@@ -126,10 +136,10 @@ async def get_project_metadata(project_id: str) -> dict | None:
 
 async def get_multiple_projects_metadata(project_ids: list[str]) -> dict[str, dict]:
     """
-    Batch fetch project metadata for multiple projects with rate limit awareness.
+    Batch fetch project metadata for multiple projects using Modrinth's batch API.
 
-    Uses concurrent requests with a semaphore to respect rate limits.
-    Modrinth rate limit: ~300 requests/5 minutes, so we limit concurrent requests.
+    Uses Modrinth API v3 batch endpoint: GET /v3/projects?ids=["id1","id2",...]
+    Batches requests in groups of 100 (Modrinth's limit per request).
 
     Args:
         project_ids: List of Modrinth project slugs/IDs
@@ -138,33 +148,72 @@ async def get_multiple_projects_metadata(project_ids: list[str]) -> dict[str, di
         Dict mapping project_id -> metadata dict
         Failed/not found projects will have None as value
     """
-    # Limit concurrent requests to avoid rate limiting (max 5 at a time)
-    semaphore = asyncio.Semaphore(5)
+    if not project_ids:
+        return {}
 
-    async def fetch_with_semaphore(project_id: str) -> tuple[str, dict | None]:
-        async with semaphore:
-            try:
-                # Small delay between requests to be respectful
-                await asyncio.sleep(0.1)
-                metadata = await get_project_metadata(project_id)
-                return (project_id, metadata)
-            except Exception as e:
-                logger.error(f"Failed to fetch metadata for {project_id}: {e}")
-                return (project_id, None)
-
-    # Fetch all projects concurrently (but limited by semaphore)
-    results = await asyncio.gather(
-        *[fetch_with_semaphore(pid) for pid in project_ids],
-        return_exceptions=True
-    )
-
-    # Build result dictionary
     metadata_dict = {}
-    for result in results:
-        if isinstance(result, Exception):
-            logger.error(f"Exception during batch fetch: {result}")
-            continue
-        project_id, metadata = result
-        metadata_dict[project_id] = metadata
+
+    # Batch in groups of 100 (Modrinth API limit)
+    batch_size = 100
+    for i in range(0, len(project_ids), batch_size):
+        batch = project_ids[i:i + batch_size]
+
+        try:
+            async with httpx.AsyncClient() as client:
+                # Modrinth batch endpoint expects JSON array as query param
+                ids_param = json.dumps(batch)
+
+                response = await client.get(
+                    f"https://api.modrinth.com/v3/projects",
+                    params={"ids": ids_param},
+                    headers={
+                        "User-Agent": "Fourdrinier/1.0 (minecraft server manager)"
+                    },
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                projects_data = response.json()
+
+                # Process each project in the batch response
+                for project_data in projects_data:
+                    project_id = project_data.get("id") or project_data.get("slug")
+
+                    # Extract project_type from project_types array
+                    project_types = project_data.get("project_types", ["mod"])
+                    project_type = project_types[0] if project_types else "mod"
+
+                    # Use "name" field (Modrinth v3)
+                    title = project_data.get("name", project_id)
+
+                    metadata_dict[project_id] = {
+                        "title": title,
+                        "description": project_data.get("description", ""),
+                        "icon_url": project_data.get("icon_url"),
+                        "game_versions": project_data.get("game_versions", []),
+                        "loaders": project_data.get("loaders", []),
+                        "project_type": project_type,
+                        "project_types": project_types,
+                    }
+
+                # Mark any projects not in response as not found
+                returned_ids = {p.get("id") or p.get("slug") for p in projects_data}
+                for project_id in batch:
+                    if project_id not in returned_ids and project_id not in metadata_dict:
+                        metadata_dict[project_id] = None
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                logger.warning(f"Rate limited by Modrinth API during batch fetch")
+            logger.error(f"HTTP error fetching batch: {e}")
+            # Mark all projects in failed batch as None
+            for project_id in batch:
+                if project_id not in metadata_dict:
+                    metadata_dict[project_id] = None
+        except Exception as e:
+            logger.error(f"Error fetching batch: {e}")
+            # Mark all projects in failed batch as None
+            for project_id in batch:
+                if project_id not in metadata_dict:
+                    metadata_dict[project_id] = None
 
     return metadata_dict

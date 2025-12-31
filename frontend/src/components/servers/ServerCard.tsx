@@ -13,10 +13,33 @@ import {
 import { useStartServer } from '@/lib/hooks/useStartServer';
 import { useStopServer } from '@/lib/hooks/useStopServer';
 import { useDeleteServer } from '@/lib/hooks/useDeleteServer';
-import type { Server } from '@/lib/api/types';
+import type { Server, ModrinthProject } from '@/lib/api/types';
 
 interface ServerCardProps {
   server: Server;
+}
+
+function countProjectsByType(projects: ModrinthProject[] | null | undefined): {
+  mods: number;
+  datapacks: number;
+  shaders: number;
+  resourcepacks: number;
+  plugins: number;
+} {
+  const counts = { mods: 0, datapacks: 0, shaders: 0, resourcepacks: 0, plugins: 0 };
+
+  if (!projects) return counts;
+
+  for (const project of projects) {
+    const type = project.type || 'mod';
+    if (type === 'datapack') counts.datapacks++;
+    else if (type === 'shader') counts.shaders++;
+    else if (type === 'resourcepack') counts.resourcepacks++;
+    else if (type === 'plugin') counts.plugins++;
+    else counts.mods++; // default to mod
+  }
+
+  return counts;
 }
 
 export function ServerCard({ server }: ServerCardProps) {
@@ -86,11 +109,38 @@ export function ServerCard({ server }: ServerCardProps) {
             <CardDescription className="mt-1">
               <Badge variant="secondary" className="mr-2">{server.loader}</Badge>
               <span className="text-sm">{server.game_version}</span>
-              {server.modrinth_projects && server.modrinth_projects.length > 0 && (
-                <Badge variant="outline" className="ml-2">
-                  {server.modrinth_projects.length} {server.modrinth_projects.length === 1 ? 'mod' : 'mods'}
-                </Badge>
-              )}
+              {server.modrinth_projects && server.modrinth_projects.length > 0 && (() => {
+                const counts = countProjectsByType(server.modrinth_projects);
+                return (
+                  <span className="inline-flex gap-1 ml-2">
+                    {counts.mods > 0 && (
+                      <Badge variant="outline">
+                        {counts.mods} {counts.mods === 1 ? 'mod' : 'mods'}
+                      </Badge>
+                    )}
+                    {counts.datapacks > 0 && (
+                      <Badge variant="outline">
+                        {counts.datapacks} {counts.datapacks === 1 ? 'datapack' : 'datapacks'}
+                      </Badge>
+                    )}
+                    {counts.shaders > 0 && (
+                      <Badge variant="outline">
+                        {counts.shaders} {counts.shaders === 1 ? 'shader' : 'shaders'}
+                      </Badge>
+                    )}
+                    {counts.resourcepacks > 0 && (
+                      <Badge variant="outline">
+                        {counts.resourcepacks} {counts.resourcepacks === 1 ? 'resource pack' : 'resource packs'}
+                      </Badge>
+                    )}
+                    {counts.plugins > 0 && (
+                      <Badge variant="outline">
+                        {counts.plugins} {counts.plugins === 1 ? 'plugin' : 'plugins'}
+                      </Badge>
+                    )}
+                  </span>
+                );
+              })()}
             </CardDescription>
           </div>
           <DropdownMenu>

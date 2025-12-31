@@ -13,6 +13,27 @@ the GPLv3 License. See the LICENSE file for more details.
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_validator
+from typing import Any
+
+
+class ModrinthProject(BaseModel):
+    """
+    Single Modrinth project with type information.
+
+    Supported types:
+    - mod: Server-side mods (requires loader compatibility)
+    - datapack: Data packs (loader-agnostic, uses datapack: prefix in container)
+    - shader: Shader packs (client-side, not passed to container)
+    - resourcepack: Resource packs (client-side, not passed to container)
+    - plugin: Plugins for Paper/Spigot (loader-agnostic)
+    """
+    id: str = Field(..., description="Project slug or ID from Modrinth")
+    type: str = Field(
+        default="mod",
+        pattern="^(mod|datapack|shader|resourcepack|plugin)$",
+        description="Project type from Modrinth",
+    )
 
 
 class ServerCreate(BaseModel):
@@ -33,11 +54,11 @@ class ServerCreate(BaseModel):
         title="Game Version",
         json_schema_extra={"examples": ["1.17.1"]},
     )
-    modrinth_projects: list[str] | None = Field(
+    modrinth_projects: list[ModrinthProject] | None = Field(
         default=None,
         title="Modrinth Projects",
-        description="List of Modrinth project slugs/IDs for Fabric mod installation",
-        json_schema_extra={"examples": [["lithium", "sodium", "fabric-api"]]},
+        description="List of Modrinth projects with type information",
+        json_schema_extra={"examples": [[{"id": "lithium", "type": "mod"}, {"id": "terralith", "type": "datapack"}]]},
     )
 
     # Per-server resource allocation (optional, uses global defaults if not specified)
@@ -96,6 +117,27 @@ class ServerCreate(BaseModel):
             raise ValueError('Memory/Storage must be in format "2Gi" or "512Mi"')
         return v
 
+    @model_validator(mode='before')
+    @classmethod
+    def convert_legacy_modrinth_projects(cls, data: Any) -> Any:
+        """
+        Convert legacy format (list of strings) to new format (list of dicts).
+        This provides backward compatibility for existing API clients.
+
+        Old format: ["sodium", "lithium"]
+        New format: [{"id": "sodium", "type": "mod"}, {"id": "lithium", "type": "mod"}]
+        """
+        if isinstance(data, dict) and "modrinth_projects" in data:
+            projects = data["modrinth_projects"]
+            if projects and isinstance(projects, list) and len(projects) > 0:
+                # Check if first element is a string (old format)
+                if isinstance(projects[0], str):
+                    # Convert to new format
+                    data["modrinth_projects"] = [
+                        {"id": project_id, "type": "mod"} for project_id in projects
+                    ]
+        return data
+
 
 class ServerUpdate(BaseModel):
     name: str = Field(
@@ -104,11 +146,11 @@ class ServerUpdate(BaseModel):
         description="The name of the server.",
         json_schema_extra={"examples": ["My Server"]},
     )
-    modrinth_projects: list[str] | None = Field(
+    modrinth_projects: list[ModrinthProject] | None = Field(
         default=None,
         title="Modrinth Projects",
-        description="List of Modrinth project slugs/IDs for Fabric mod installation",
-        json_schema_extra={"examples": [["lithium", "sodium", "fabric-api"]]},
+        description="List of Modrinth projects with type information",
+        json_schema_extra={"examples": [[{"id": "lithium", "type": "mod"}, {"id": "terralith", "type": "datapack"}]]},
     )
 
     # Resource allocation (can only be updated when server is stopped)
@@ -160,13 +202,34 @@ class ServerUpdate(BaseModel):
             raise ValueError('Memory must be in format "2Gi" or "512Mi"')
         return v
 
+    @model_validator(mode='before')
+    @classmethod
+    def convert_legacy_modrinth_projects(cls, data: Any) -> Any:
+        """
+        Convert legacy format (list of strings) to new format (list of dicts).
+        This provides backward compatibility for existing API clients.
+
+        Old format: ["sodium", "lithium"]
+        New format: [{"id": "sodium", "type": "mod"}, {"id": "lithium", "type": "mod"}]
+        """
+        if isinstance(data, dict) and "modrinth_projects" in data:
+            projects = data["modrinth_projects"]
+            if projects and isinstance(projects, list) and len(projects) > 0:
+                # Check if first element is a string (old format)
+                if isinstance(projects[0], str):
+                    # Convert to new format
+                    data["modrinth_projects"] = [
+                        {"id": project_id, "type": "mod"} for project_id in projects
+                    ]
+        return data
+
 
 class ServerResponse(BaseModel):
     id: str
     name: str
     loader: str
     game_version: str
-    modrinth_projects: list[str] | None = None
+    modrinth_projects: list[ModrinthProject] | None = None
     status: str = Field(
         default="created",
         title="Server Status",
@@ -189,6 +252,10 @@ class ModrinthProjectEnriched(BaseModel):
     icon_url: str | None = None
     compatible: bool
     warnings: list[str] = Field(default_factory=list)
+    project_type: str = Field(
+        default="mod",
+        description="Project type (mod, datapack, shader, resourcepack, plugin)",
+    )
 
 
 class ModrinthProjectInfo(BaseModel):
@@ -216,7 +283,7 @@ class IncompatibleProject(BaseModel):
 class ImportCollectionResponse(BaseModel):
     """Response for collection import with compatibility warnings"""
     message: str
-    projects: list[str]
+    projects: list[ModrinthProject]
     new_count: int
     total_count: int
     warnings: list[str] = Field(default_factory=list)

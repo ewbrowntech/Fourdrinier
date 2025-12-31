@@ -21,22 +21,26 @@ logger = logging.getLogger(__name__)
 
 
 def check_project_compatibility(
-    metadata: dict, game_version: str, loader: str
+    metadata: dict, game_version: str, loader: str, project_type: str = "mod"
 ) -> tuple[bool, list[str]]:
     """
     Check if a single project is compatible with given game version and loader.
+
+    Loader checking is only performed for mods. Other project types (datapack, shader,
+    resourcepack, plugin) only require game version compatibility.
 
     Args:
         metadata: Project metadata dict with game_versions and loaders
         game_version: Target Minecraft version (e.g., "1.20.1")
         loader: Target loader (e.g., "fabric")
+        project_type: Project type (mod, datapack, shader, resourcepack, plugin)
 
     Returns:
         Tuple of (compatible: bool, warnings: list[str])
     """
     warnings = []
 
-    # Check game version compatibility
+    # Check game version compatibility (required for ALL project types)
     supported_versions = metadata.get("game_versions", [])
     if game_version not in supported_versions:
         warnings.append(
@@ -45,13 +49,15 @@ def check_project_compatibility(
             + ("..." if len(supported_versions) > 5 else "")
         )
 
-    # Check loader compatibility (case-insensitive)
-    supported_loaders = [l.lower() for l in metadata.get("loaders", [])]
-    if loader.lower() not in supported_loaders:
-        warnings.append(
-            f"Not available for {loader} loader. "
-            f"Supported: {', '.join(metadata.get('loaders', []))}"
-        )
+    # Check loader compatibility (ONLY for mods)
+    # Datapacks, shaders, resourcepacks, and plugins are loader-agnostic
+    if project_type == "mod":
+        supported_loaders = [l.lower() for l in metadata.get("loaders", [])]
+        if loader.lower() not in supported_loaders:
+            warnings.append(
+                f"Not available for {loader} loader. "
+                f"Supported: {', '.join(metadata.get('loaders', []))}"
+            )
 
     compatible = len(warnings) == 0
     return compatible, warnings
@@ -77,15 +83,33 @@ async def validate_server_modrinth_projects(
     if state.persistent:
         await db.refresh(server)
 
-    project_ids = list(server.modrinth_projects or [])
+    project_list = server.modrinth_projects or []
     server_game_version = server.game_version
     server_loader = server.loader
-    if not project_ids:
+
+    if not project_list:
         return {
             "compatible": True,
             "warnings": [],
             "incompatible_projects": [],
         }
+
+    # Extract project IDs (handle both old and new formats)
+    project_ids = []
+    project_types = {}  # Map project_id -> project_type
+
+    for project_entry in project_list:
+        if isinstance(project_entry, str):
+            # Old format: simple string
+            project_ids.append(project_entry)
+            project_types[project_entry] = "mod"  # Default for backward compatibility
+        elif isinstance(project_entry, dict):
+            # New format: {"id": "...", "type": "..."}
+            project_id = project_entry.get("id")
+            project_type = project_entry.get("type", "mod")
+            if project_id:
+                project_ids.append(project_id)
+                project_types[project_id] = project_type
 
     # Fetch metadata for all projects from Modrinth API
     projects_metadata = await get_multiple_projects_metadata(project_ids)
@@ -95,6 +119,7 @@ async def validate_server_modrinth_projects(
 
     for project_id in project_ids:
         metadata = projects_metadata.get(project_id)
+        project_type = project_types.get(project_id, "mod")
 
         if metadata is None:
             # Project not found
@@ -109,9 +134,9 @@ async def validate_server_modrinth_projects(
             })
             continue
 
-        # Check compatibility
+        # Check compatibility (with project type awareness)
         compatible, warnings = check_project_compatibility(
-            metadata, server_game_version, server_loader
+            metadata, server_game_version, server_loader, project_type
         )
 
         if not compatible:

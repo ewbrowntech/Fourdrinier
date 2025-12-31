@@ -23,7 +23,7 @@ class Server(Base):
     name: Mapped[str] = mapped_column(index=True, default="My Server")
     loader: Mapped[str]
     game_version: Mapped[str]
-    modrinth_projects: Mapped[list[str] | None] = mapped_column(JSON, default=None)
+    modrinth_projects: Mapped[list[dict] | None] = mapped_column(JSON, default=None)
 
     # Per-server resource allocation (nullable - falls back to global config)
     cpu_request: Mapped[str | None] = mapped_column(default=None)

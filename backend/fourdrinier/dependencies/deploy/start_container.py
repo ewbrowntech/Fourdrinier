@@ -107,7 +107,7 @@ async def start_container(
     server_id: str,
     game_version: str = "1.20.1",
     loader: str = "paper",
-    modrinth_projects: list[str] | None = None,
+    modrinth_projects: list[str] | list[dict] | None = None,
     db: AsyncSession | None = None,
     # Per-server resource allocation (optional, defaults to global config)
     cpu_request: str | None = None,
@@ -243,13 +243,41 @@ async def start_container(
 
         # Add Fabric + Modrinth configuration if applicable
         if loader == "fabric" and modrinth_projects:
-            # Join list into comma-separated string
-            projects_str = ",".join(modrinth_projects)
-            env_vars.extend([
-                client.V1EnvVar(name="MODRINTH_PROJECTS", value=projects_str),
-                client.V1EnvVar(name="MODRINTH_DOWNLOAD_DEPENDENCIES", value="required"),
-                client.V1EnvVar(name="MODRINTH_ALLOWED_VERSION_TYPE", value="alpha"),
-            ])
+            # Process projects based on type
+            mods = []
+            datapacks = []
+
+            for project_entry in modrinth_projects:
+                if isinstance(project_entry, str):
+                    # Old format: treat as mod
+                    mods.append(project_entry)
+                elif isinstance(project_entry, dict):
+                    # New format: filter by type
+                    project_id = project_entry.get("id")
+                    project_type = project_entry.get("type", "mod")
+
+                    if not project_id:
+                        continue
+
+                    if project_type == "mod":
+                        mods.append(project_id)
+                    elif project_type == "datapack":
+                        # Use datapack: prefix as per itzg docker image docs
+                        datapacks.append(f"datapack:{project_id}")
+                    # Shaders, resourcepacks, and plugins are excluded for Fabric servers
+
+            # Build MODRINTH_PROJECTS env var (mods + datapacks)
+            all_projects = mods + datapacks
+
+            if all_projects:
+                projects_str = ",".join(all_projects)
+                env_vars.extend([
+                    client.V1EnvVar(name="MODRINTH_PROJECTS", value=projects_str),
+                    client.V1EnvVar(name="MODRINTH_DOWNLOAD_DEPENDENCIES", value="required"),
+                    client.V1EnvVar(name="MODRINTH_ALLOWED_VERSION_TYPE", value="alpha"),
+                    # Prevent auto-updating mods on restart - keeps existing mod versions
+                    client.V1EnvVar(name="REMOVE_OLD_MODS", value="FALSE"),
+                ])
 
         pod = client.V1Pod(
             metadata=client.V1ObjectMeta(

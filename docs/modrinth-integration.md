@@ -1,14 +1,63 @@
 # Modrinth Integration
 
-The Modrinth integration allows users to automatically install and manage Minecraft mods from the Modrinth platform for Fabric servers. This document explains the architecture and implementation.
+The Modrinth integration allows users to automatically install and manage Minecraft content from the Modrinth platform for Fabric servers. This includes mods, datapacks, shaders, resource packs, and plugins. This document explains the architecture and implementation.
 
 ## Overview
 
 Modrinth integration in Fourdrinier enables:
-- Automatic mod installation from Modrinth
-- Collection imports (add entire mod collections at once)
-- Compatibility validation (prevents incompatible mods from breaking servers)
-- Rich metadata display (mod icons, descriptions, version info)
+- Automatic installation of mods, datapacks, shaders, resource packs, and plugins
+- Collection imports (add entire collections at once)
+- Type-aware compatibility validation (prevents incompatible content from breaking servers)
+- Rich metadata display (project icons, descriptions, version info)
+- Separate UI sections per project type with individual counters
+
+---
+
+## Project Types
+
+Fourdrinier supports five distinct Modrinth project types, each with different compatibility rules and container behavior:
+
+| Type | Description | Game Version Check | Loader Check | Container Behavior |
+|------|-------------|-------------------|--------------|-------------------|
+| **mod** | Server-side mods | ✓ | ✓ | Installed as-is (e.g., `sodium`) |
+| **datapack** | Data packs | ✓ | ✗ | Installed with prefix (e.g., `datapack:terralith`) |
+| **shader** | Shader packs | ✓ | ✗ | **Client-side only** - excluded from container |
+| **resourcepack** | Resource packs | ✓ | ✗ | **Client-side only** - excluded from container |
+| **plugin** | Server plugins | ✓ | ✗ | Installed for compatible loaders (Paper, Spigot) |
+
+### Compatibility Rules by Type
+
+- **Mods**: Validated against both game version AND loader (e.g., must support Fabric 1.20.1)
+- **All other types**: Validated against game version ONLY (loader-agnostic)
+
+This distinction is important because:
+- Datapacks work across all loaders (Vanilla, Fabric, Forge, etc.)
+- Shaders and resource packs are client-side and don't depend on server loader
+- Plugins have their own loader requirements handled separately
+
+### Data Structure
+
+Projects are stored as structured objects with type information:
+
+**New format (current):**
+```json
+{
+  "modrinth_projects": [
+    {"id": "sodium", "type": "mod"},
+    {"id": "terralith", "type": "datapack"},
+    {"id": "complementary-shaders", "type": "shader"}
+  ]
+}
+```
+
+**Legacy format (backward compatible):**
+```json
+{
+  "modrinth_projects": ["sodium", "lithium", "fabric-api"]
+}
+```
+
+The system automatically converts legacy string arrays to the new format, defaulting to type `"mod"` for backward compatibility.
 
 ---
 
@@ -19,6 +68,32 @@ Modrinth integration in Fourdrinier enables:
 **File:** `backend/fourdrinier/services/modrinth_client.py`
 
 This service handles all communication with Modrinth's API v3.
+
+#### Modrinth API v3 Field Structure
+
+**Critical**: Modrinth API v3 uses different field names than might be expected:
+
+| Expected Field | Actual API v3 Field | Type | Notes |
+|----------------|---------------------|------|-------|
+| `title` | `name` | string | Project display name |
+| `project_type` | `project_types` | array | Array of types (e.g., `["mod"]`, `["resourcepack"]`) |
+
+**Example API Response:**
+```json
+{
+  "name": "Complementary Shaders",
+  "project_types": ["shader"],
+  "description": "...",
+  "icon_url": "...",
+  "game_versions": ["1.20.1", "1.20.2"],
+  "loaders": []
+}
+```
+
+The code intelligently selects the best type from the `project_types` array:
+- If a project is available as both **mod** and **datapack**, and the server loader is **Fabric** or **Forge**, it will prefer **mod**
+- Otherwise, it uses the first element from the array
+- Uses `name` field for the project title
 
 #### Key Functions
 
@@ -34,33 +109,44 @@ This service handles all communication with Modrinth's API v3.
   - Includes User-Agent and 10s timeout
 
 - **`get_project_metadata(project_id: str) -> dict | None`**
-  - Retrieves individual project metadata (title, description, icon_url, game_versions, loaders)
+  - Retrieves individual project metadata (name, description, icon_url, game_versions, loaders, **project_type**)
+  - **Extracts project_type** from Modrinth API v3 `project_types` array (first element)
+  - Maps to one of: mod, datapack, shader, resourcepack, plugin
+  - Defaults to "mod" if project_types field is missing or empty
+  - Note: Modrinth API v3 uses `project_types` (plural, array) not `project_type` (singular)
+  - Note: Modrinth API v3 uses `name` field not `title`
   - Handles 404s gracefully (returns None for missing projects)
   - Distinguishes between 404 (not found) and 429 (rate limits)
 
 - **`get_multiple_projects_metadata(project_ids: list[str]) -> dict[str, dict | None]`**
-  - Batch fetches metadata with rate limiting
-  - Uses async semaphore (max 5 concurrent requests) to respect Modrinth's rate limits
-  - Adds 0.1s delays between requests
-  - Handles failures per-project without failing entire batch
-  - Returns dict mapping project_id to metadata (or None if failed)
+  - **Batch fetches metadata using Modrinth's batch API endpoint**: `GET /v3/projects?ids=["id1","id2",...]`
+  - Batches requests in groups of 100 (Modrinth's API limit per request)
+  - Single API call per 100 projects (vastly reduces rate limit issues)
+  - Handles failures per-batch without failing entire operation
+  - Returns dict mapping project_id to metadata (or None if not found)
 
 ### 2. Compatibility Validator Service
 
 **File:** `backend/fourdrinier/services/compatibility_validator.py`
 
-Validates whether mods work with a server's configuration before startup.
+Validates whether projects work with a server's configuration before startup, with type-aware compatibility rules.
 
 #### Key Functions
 
-- **`check_project_compatibility(metadata: dict, game_version: str, loader: str) -> tuple[bool, list[str]]`**
+- **`check_project_compatibility(metadata: dict, game_version: str, loader: str, project_type: str = "mod") -> tuple[bool, list[str]]`**
+  - **Type-aware validation:**
+    - **For mods**: Checks both game_version AND loader compatibility
+    - **For all other types** (datapack, shader, resourcepack, plugin): Checks ONLY game_version (loader-agnostic)
   - Checks if game_version exists in project's `game_versions` list
-  - Checks if loader (case-insensitive) exists in project's `loaders` list
+  - Checks if loader (case-insensitive) exists in project's `loaders` list (mods only)
   - Returns tuple: `(compatible: bool, warnings: list[str])`
   - Provides helpful error messages listing supported versions/loaders
 
 - **`validate_server_modrinth_projects(server, db) -> ValidationResult`**
+  - **Handles both legacy (string array) and new (object array) formats**
+  - Extracts project type from each entry (defaults to "mod" for legacy format)
   - Fetches metadata for all projects on a server
+  - Passes project type to `check_project_compatibility()` for type-aware validation
   - Returns comprehensive validation result with:
     - `compatible` (bool): Whether ALL projects are compatible
     - `warnings` (list[str]): User-friendly warning messages
@@ -79,16 +165,23 @@ class Server(Base):
     name: str
     loader: str
     game_version: str
-    modrinth_projects: list[str] | None  # JSON-stored list of project slugs
+    modrinth_projects: list[dict] | None  # JSON-stored list of project objects
 ```
 
-The `modrinth_projects` field is stored as JSON, allowing flexible list management.
+The `modrinth_projects` field is stored as JSON with structured objects containing project ID and type.
 
 #### Pydantic Schemas
 
-- **`ServerCreate`** and **`ServerUpdate`** - Include optional `modrinth_projects` field
+- **`ModrinthProject`** - Project model with ID and type:
+  ```python
+  class ModrinthProject(BaseModel):
+      id: str  # Project slug or ID
+      type: str = Field(default="mod", pattern="^(mod|datapack|shader|resourcepack|plugin)$")
+  ```
+- **`ServerCreate`** and **`ServerUpdate`** - Include optional `modrinth_projects: list[ModrinthProject] | None`
+  - Includes `@model_validator` for backward compatibility (auto-converts legacy string arrays)
 - **`ServerResponse`** - Includes modrinth_projects for API responses
-- **`ModrinthProjectEnriched`** - Includes compatibility status and warnings
+- **`ModrinthProjectEnriched`** - Includes compatibility status, warnings, and **project_type**
 - **`ModrinthProjectInfo`** - Basic project metadata (title, description, icon)
 - **`ImportCollectionResponse`** - Detailed collection import results
 - **`IncompatibleProject`** - Detailed incompatibility info
@@ -109,8 +202,10 @@ The `modrinth_projects` field is stored as JSON, allowing flexible list manageme
 #### `POST /{server_id}/import-collection`
 - Accepts Modrinth collection URL
 - Extracts all projects from collection
+- **Auto-detects project types** by fetching metadata from Modrinth API
+  - **Smart type selection**: If a project is available as both mod and datapack, prefers mod for Fabric/Forge servers
 - Merges with existing projects (deduplicates)
-- Validates compatibility (informative only, doesn't block)
+- Validates compatibility with type-aware checking (informative only, doesn't block)
 - Returns detailed response with warnings and incompatibility details
 
 ### Server Lifecycle Integration
@@ -128,10 +223,22 @@ The `modrinth_projects` field is stored as JSON, allowing flexible list manageme
 #### Kubernetes Pod Configuration
 
 The pod is created with environment variables:
-- `MODRINTH_PROJECTS` - comma-separated project list
+- `MODRINTH_PROJECTS` - comma-separated project list with type-specific formatting
 - `MODRINTH_DOWNLOAD_DEPENDENCIES` - set to "required"
 
-The container initialization script uses these variables to download mods from Modrinth before starting the Minecraft server.
+**Type-specific container behavior:**
+- **Mods**: Passed as-is (e.g., `sodium,lithium,fabric-api`)
+- **Datapacks**: Passed with `datapack:` prefix (e.g., `datapack:terralith,datapack:incendium`)
+- **Shaders**: Excluded (client-side only, not installed in container)
+- **Resource packs**: Excluded (client-side only, not installed in container)
+- **Plugins**: Passed as-is (for Paper/Spigot servers)
+
+**Example `MODRINTH_PROJECTS` value:**
+```
+sodium,lithium,datapack:terralith,datapack:incendium
+```
+
+The container initialization script (from [itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server)) uses these variables to download content from Modrinth before starting the Minecraft server.
 
 ---
 
@@ -141,7 +248,7 @@ The container initialization script uses these variables to download mods from M
 
 **File:** `frontend/src/lib/api/modrinth.ts`
 
-Direct Modrinth API client for browser-based metadata fetching with compatibility validation:
+Direct Modrinth API client for browser-based metadata fetching with type-aware compatibility validation:
 
 ```typescript
 getModrinthProjects(
@@ -154,9 +261,15 @@ getModrinthProjects(
 - Fetches projects directly from Modrinth API v3
 - Batches requests in groups of 100
 - Deduplicates project IDs
-- **Performs client-side compatibility validation** against game version and loader
-- Returns enriched metadata with `compatible` flag and `warnings` array
-- Maps Modrinth API response fields (`title`, `description`, `icon_url`, `game_versions`, `loaders`) to internal format
+- **Extracts `project_type`** from Modrinth API v3 `project_types` array with smart selection:
+  - If project available as both mod and datapack, prefers mod for Fabric/Forge loaders
+  - Otherwise uses first element from array
+- **Performs type-aware client-side compatibility validation:**
+  - **For mods**: Checks both game version AND loader
+  - **For all other types**: Checks ONLY game version (loader-agnostic)
+- Returns enriched metadata with `compatible` flag, `warnings` array, and `project_type`
+- Maps Modrinth API response fields (`name`, `description`, `icon_url`, `game_versions`, `loaders`, `project_types`) to internal format
+- Note: Modrinth API v3 uses `name` not `title`, and `project_types` (array) not `project_type`
 - Eliminates need for backend metadata endpoint, reducing server load
 
 ### 2. UI Components
@@ -165,9 +278,13 @@ getModrinthProjects(
 
 **File:** `frontend/src/components/servers/ServerCard.tsx`
 
-- Displays server overview with mod count badge
-- Shows total number of installed mods (e.g., "3 mods")
-- Click through to ServerDetailPage to view full mod list with details
+- Displays server overview with **individual type counters**
+- Shows separate badges for each project type with count > 0:
+  - "3 mods"
+  - "2 datapacks"
+  - "1 shader"
+- Uses `countProjectsByType()` helper to group projects
+- Click through to ServerDetailPage to view full project list with details
 
 #### CreateServerDialog
 
@@ -182,32 +299,37 @@ getModrinthProjects(
 
 **File:** `frontend/src/components/servers/InlineModrinthEditor.tsx`
 
-Full mod management interface used in server detail pages:
-- Add individual projects manually
+Full project management interface used in server detail pages:
+- **Type-grouped display**: Projects organized into separate sections (Mods, Datapacks, Shaders, Resource Packs, Plugins)
+- Add individual projects manually with **auto-detect type** from Modrinth API
+  - Smart type selection: prefers mod over datapack for Fabric/Forge servers
+- Allow manual type override when adding projects
 - **Import collections** - full Modrinth collection import UI:
   - Accepts collection URL
-  - Calls backend `/import-collection` endpoint
+  - Calls backend `/import-collection` endpoint (auto-detects types with smart selection)
   - Shows warnings/incompatibilities to user
   - Refreshes metadata display
-- Shows existing projects as pills with mod icons
+- Shows existing projects as pills with project icons, **grouped by type**
 - **Compatibility indicators**:
-  - Compatible mods: standard gray pills
-  - Incompatible mods: yellow pills with warning border
-- Tooltips on mod pills show:
-  - Incompatibility warnings with supported versions/loaders
-  - Clickable links to Modrinth mod pages
+  - Compatible projects: standard gray pills
+  - Incompatible projects: yellow pills with warning border
+- Tooltips on project pills show:
+  - Project summary
+  - Incompatibility warnings with supported versions/loaders (type-aware)
+  - Clickable links to Modrinth project pages
 - Disables Modrinth features for non-Fabric servers
-- Fetches enriched metadata directly from Modrinth API with client-side validation
+- Fetches enriched metadata directly from Modrinth API with type-aware client-side validation
 
 #### ServerDetailPage
 
 **File:** `frontend/src/pages/ServerDetailPage.tsx`
 
 - Shows detailed server information
-- Displays all mods as pills with mod names and icons
-- **Visual compatibility feedback**: incompatible mods highlighted in yellow
-- Tooltips on mod pills show warnings and provide clickable links to Modrinth
-- Full inline edit capability for mod management
+- **Header displays individual type counters** (e.g., "3 mods", "2 datapacks")
+- Displays all projects as pills with names and icons, **organized by type**
+- **Visual compatibility feedback**: incompatible projects highlighted in yellow
+- Tooltips on project pills show warnings and provide clickable links to Modrinth
+- Full inline edit capability for project management
 - Real-time server logs alongside configuration
 
 ---
@@ -295,10 +417,10 @@ Frontend:
 
 ### 2. Rate Limit Awareness
 
-- Semaphore limiting to 5 concurrent requests
-- Small delays (0.1s) between requests
+- **Uses Modrinth's batch API** (`/v3/projects?ids=[...]`) to fetch up to 100 projects per request
+- Drastically reduces API calls compared to individual requests
 - Graceful handling of 429 (rate limit) responses
-- Per-project error handling in batch operations
+- Per-batch error handling without failing entire operation
 
 ### 3. Client-Side Validation & Metadata Loading
 
@@ -322,6 +444,17 @@ Frontend:
 - Missing projects don't fail entire operations
 - Failed metadata lookups return null; component displays project ID as fallback
 - Collection imports work even if some projects are deleted from Modrinth
+
+### 6. Smart Type Selection
+
+- Projects can be available as multiple types on Modrinth (e.g., both mod and datapack)
+- Modrinth API v3 returns `project_types` as an array (e.g., `["mod", "datapack"]`)
+- **Intelligent type selection based on server loader:**
+  - For **Fabric/Forge** servers: Prefers `mod` over `datapack` when both available
+  - Rationale: Mods provide better performance and features on modded servers
+  - For other loaders or single-type projects: Uses first type from array
+- Applied in both backend (collection import) and frontend (manual project add)
+- Ensures optimal project type is automatically selected for the server configuration
 
 ---
 
@@ -349,6 +482,32 @@ Frontend:
 4. **Timeout Protection:** 10s HTTP timeout on all Modrinth API calls
 5. **Compatibility Blocking:** Prevents server startup with incompatible mods (data integrity)
 6. **Data Persistence:** Projects stored as JSON in database, survives restarts
+
+---
+
+## Maintenance Tools
+
+### Fix Project Types Script
+
+**File:** `backend/scripts/fix_project_types.py`
+
+A one-time migration script to update existing servers with correct project types from Modrinth API.
+
+**Usage:**
+```bash
+python -m scripts.fix_project_types
+```
+
+**What it does:**
+1. Fetches all servers with modrinth_projects
+2. For each project, fetches metadata from Modrinth API to get correct project_type
+3. Updates the database with corrected types
+4. Converts legacy string format to new structured format
+
+**When to use:**
+- After upgrading from a version that didn't support project types
+- To fix servers that have incorrect types (e.g., shaders labeled as mods)
+- To migrate from old string array format to new structured format
 
 ---
 

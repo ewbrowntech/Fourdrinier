@@ -15,6 +15,29 @@ import { ArrowLeft, Play, Square, Trash2, AlertCircle, Pencil, Check, X } from '
 import { ServerLogs } from '@/components/servers/ServerLogs';
 import { InlineModrinthEditor } from '@/components/servers/InlineModrinthEditor';
 import { InlineResourceEditor } from '@/components/servers/InlineResourceEditor';
+import type { ModrinthProject } from '@/lib/api/types';
+
+function countProjectsByType(projects: ModrinthProject[] | null | undefined) {
+  const counts = { mods: 0, datapacks: 0, shaders: 0, resourcepacks: 0, plugins: 0 };
+  if (!projects) return counts;
+
+  for (const project of projects) {
+    const type = project.type || 'mod';
+    if (type === 'datapack') {
+      counts.datapacks++;
+    } else if (type === 'shader') {
+      counts.shaders++;
+    } else if (type === 'resourcepack') {
+      counts.resourcepacks++;
+    } else if (type === 'plugin') {
+      counts.plugins++;
+    } else {
+      counts.mods++;
+    }
+  }
+
+  return counts;
+}
 
 export function ServerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -196,11 +219,46 @@ export function ServerDetailPage() {
           <CardDescription>
             <Badge variant="secondary" className="mr-2">{server.loader}</Badge>
             <span>{server.game_version}</span>
-            {server.modrinth_projects && server.modrinth_projects.length > 0 && (
-              <Badge variant="outline" className="ml-2">
-                {server.modrinth_projects.length} {server.modrinth_projects.length === 1 ? 'mod' : 'mods'}
-              </Badge>
-            )}
+            {(() => {
+              const counts = countProjectsByType(server.modrinth_projects);
+              const badges = [];
+              if (counts.mods > 0) {
+                badges.push(
+                  <Badge key="mods" variant="outline" className="ml-2">
+                    {counts.mods} {counts.mods === 1 ? 'mod' : 'mods'}
+                  </Badge>
+                );
+              }
+              if (counts.datapacks > 0) {
+                badges.push(
+                  <Badge key="datapacks" variant="outline" className="ml-2">
+                    {counts.datapacks} {counts.datapacks === 1 ? 'datapack' : 'datapacks'}
+                  </Badge>
+                );
+              }
+              if (counts.shaders > 0) {
+                badges.push(
+                  <Badge key="shaders" variant="outline" className="ml-2">
+                    {counts.shaders} {counts.shaders === 1 ? 'shader' : 'shaders'}
+                  </Badge>
+                );
+              }
+              if (counts.resourcepacks > 0) {
+                badges.push(
+                  <Badge key="resourcepacks" variant="outline" className="ml-2">
+                    {counts.resourcepacks} {counts.resourcepacks === 1 ? 'resource pack' : 'resource packs'}
+                  </Badge>
+                );
+              }
+              if (counts.plugins > 0) {
+                badges.push(
+                  <Badge key="plugins" variant="outline" className="ml-2">
+                    {counts.plugins} {counts.plugins === 1 ? 'plugin' : 'plugins'}
+                  </Badge>
+                );
+              }
+              return badges;
+            })()}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col overflow-hidden space-y-6">
@@ -223,7 +281,7 @@ export function ServerDetailPage() {
 
               {server.loader === 'fabric' && (
                 <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-muted-foreground">Mods</h3>
+                  <h3 className="text-sm font-medium text-muted-foreground">Modrinth Projects</h3>
                   <InlineModrinthEditor
                     server={server}
                     onUpdate={(projects) =>
