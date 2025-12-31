@@ -34,3 +34,6 @@ MINECRAFT_CPU_REQUEST: str = os.getenv("MINECRAFT_CPU_REQUEST", "1000m")
 MINECRAFT_CPU_LIMIT: str = os.getenv("MINECRAFT_CPU_LIMIT", "2000m")
 MINECRAFT_MEMORY_REQUEST: str = os.getenv("MINECRAFT_MEMORY_REQUEST", "2Gi")
 MINECRAFT_MEMORY_LIMIT: str = os.getenv("MINECRAFT_MEMORY_LIMIT", "4Gi")
+
+# Host directory mounting (optional - when set, replaces PVC with hostPath)
+MINECRAFT_HOST_DATA_DIR: str | None = os.getenv("MINECRAFT_HOST_DATA_DIR", None)

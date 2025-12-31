@@ -14,6 +14,7 @@ x-app-base: &app-base
     MINECRAFT_IMAGE: ${MINECRAFT_IMAGE:-itzg/minecraft-server:java21-alpine}
     MINECRAFT_PVC_SIZE: ${MINECRAFT_PVC_SIZE:-5Gi}
     MINECRAFT_STORAGE_CLASS: ${MINECRAFT_STORAGE_CLASS:-local-path}
+    MINECRAFT_HOST_DATA_DIR: ${MINECRAFT_HOST_DATA_DIR:-}
   networks:
     - fourdrinier-network
   extra_hosts:
@@ -33,6 +34,7 @@ services:
       - "8000:8000"
     volumes:
       - ./tmp:/fd/db-data
+      - ./tmp:/fd/minecraft-data # Mount for MINECRAFT_HOST_DATA_DIR
       - ./ssh:/root/.ssh
       - ./.k8s/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro
       - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro
@@ -51,6 +53,7 @@ services:
       - "8000:8000"
     volumes:
       - test-data:/fd/db-data
+      - test-data:/fd/minecraft-data # Mount for MINECRAFT_HOST_DATA_DIR in test mode
       - ./ssh:/root/.ssh
       - ./.k8s/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro
       - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro
@@ -69,6 +72,7 @@ services:
       - "8000:8000"
     volumes:
       - ./tmp:/fd/db-data
+      - ./tmp:/fd/minecraft-data # Mount for MINECRAFT_HOST_DATA_DIR in debug mode
       - ./ssh:/root/.ssh
       - ./.k8s/token:/var/run/secrets/kubernetes.io/serviceaccount/token:ro
       - ./.k8s/ca.crt:/var/run/secrets/kubernetes.io/serviceaccount/ca.crt:ro

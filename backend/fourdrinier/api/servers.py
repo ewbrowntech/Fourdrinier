@@ -68,7 +68,7 @@ async def list_servers(db: AsyncSession = Depends(get_db)) -> list[dict]:
     # Enrich each server with its Kubernetes status
     servers_with_status = []
     for server in servers:
-        status = await get_server_status(server.id)
+        status = await get_server_status(server.id, server.name)
         server_dict = {
             "id": server.id,
             "name": server.name,
@@ -93,7 +93,7 @@ async def get_server(server_id: str, db: AsyncSession = Depends(get_db)) -> dict
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Enrich with Kubernetes status
-    status = await get_server_status(server.id)
+    status = await get_server_status(server.id, server.name)
     return {
         "id": server.id,
         "name": server.name,
@@ -117,7 +117,7 @@ async def update_server(
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Enrich with Kubernetes status
-    status = await get_server_status(server.id)
+    status = await get_server_status(server.id, server.name)
     return {
         "id": server.id,
         "name": server.name,
@@ -273,14 +273,18 @@ async def delete_server(server_id: str, db: AsyncSession = Depends(get_db)) -> N
     """
     Delete a server and all its Kubernetes resources
     """
-    # Delete Kubernetes resources (Pod, PVC, Service)
-    await delete_server_resources(server_id)
-
-    # Remove the server from the database
+    # Get server before deletion to pass name for logging
     try:
-        await crud.delete_server(db, server_id)
+        server: Server = await crud.get_server(db, server_id)
+        server_name = server.name
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Server not found")
+
+    # Delete Kubernetes resources (Pod, PVC, Service)
+    await delete_server_resources(server_id, server_name)
+
+    # Remove the server from the database
+    await crud.delete_server(db, server_id)
 
     return
 

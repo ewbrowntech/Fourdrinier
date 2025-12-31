@@ -8,30 +8,35 @@ All rights reserved. This file is part of the Fourdrinier project and is release
 the GPLv3 License. See the LICENSE file for more details.
 """
 
+import logging
+from pathlib import Path
+
+from fastapi import HTTPException
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException
-import logging
 
 from fourdrinier.core.config import MINECRAFT_CPU_LIMIT
 from fourdrinier.core.config import MINECRAFT_CPU_REQUEST
+from fourdrinier.core.config import MINECRAFT_HOST_DATA_DIR
 from fourdrinier.core.config import MINECRAFT_IMAGE
 from fourdrinier.core.config import MINECRAFT_MEMORY_LIMIT
 from fourdrinier.core.config import MINECRAFT_MEMORY_REQUEST
 from fourdrinier.core.config import MINECRAFT_PVC_SIZE
 from fourdrinier.core.config import MINECRAFT_STORAGE_CLASS
+from fourdrinier.core.utils import sanitize_directory_name
 from fourdrinier.dependencies.kubernetes_client import get_k8s_client
 
 logger = logging.getLogger(__name__)
 
 
-async def get_server_status(server_id: str) -> str:
+async def get_server_status(server_id: str, server_name: str | None = None) -> str:
     """
-    Get the current status of a Minecraft server by checking its Pod status
+    Get the current status of a Minecraft server by checking its Pod status.
 
     Args:
         server_id: Unique server ID
+        server_name: Server name (required for hostPath mode with formatted directories)
 
     Returns:
         Status string: "running", "pending", "stopped", "created", or "error"
@@ -64,17 +69,32 @@ async def get_server_status(server_id: str) -> str:
 
     except ApiException as e:
         if e.status == 404:  # Pod not found
-            # Check if PVC exists to differentiate between "created" and "stopped"
-            try:
-                v1.read_namespaced_persistent_volume_claim(pvc_name, namespace)
-                # PVC exists, so server was started before and is now stopped
-                return "stopped"
-            except ApiException as pvc_e:
-                if pvc_e.status == 404:
-                    # No PVC, server has never been started
-                    return "created"
+            # Check if storage exists to differentiate between "created" and "stopped"
+            if MINECRAFT_HOST_DATA_DIR:
+                # Check hostPath directory existence
+                if server_name:
+                    safe_name = sanitize_directory_name(server_name)
+                    storage_path = Path(MINECRAFT_HOST_DATA_DIR).resolve() / f"{safe_name} ({server_id})"
+                else:
+                    # Fallback: use server_id only if name not provided
+                    storage_path = Path(MINECRAFT_HOST_DATA_DIR).resolve() / server_id
+
+                if storage_path.exists():
+                    return "stopped"
                 else:
                     return "created"
+            else:
+                # Check PVC existence (existing logic)
+                try:
+                    v1.read_namespaced_persistent_volume_claim(pvc_name, namespace)
+                    # PVC exists, so server was started before and is now stopped
+                    return "stopped"
+                except ApiException as pvc_e:
+                    if pvc_e.status == 404:
+                        # No PVC, server has never been started
+                        return "created"
+                    else:
+                        return "created"
         else:
             # If we can't determine status, assume created
             return "created"
@@ -147,30 +167,41 @@ async def start_container(
     service_name = f"minecraft-svc-{server_id}"
 
     try:
-        # Step 1: Create PersistentVolumeClaim
-        pvc = client.V1PersistentVolumeClaim(
-            metadata=client.V1ObjectMeta(
-                name=pvc_name,
-                labels={
-                    "app": "fourdrinier",
-                    "component": "minecraft-server",
-                    "server-id": server_id,
-                },
-            ),
-            spec=client.V1PersistentVolumeClaimSpec(
-                access_modes=["ReadWriteOnce"],
-                storage_class_name=MINECRAFT_STORAGE_CLASS,
-                resources=client.V1ResourceRequirements(requests={"storage": MINECRAFT_PVC_SIZE}),
-            ),
-        )
+        # Step 1: Create storage (PVC or hostPath directory)
+        if MINECRAFT_HOST_DATA_DIR:
+            # hostPath mode: Create directory on host
+            safe_name = sanitize_directory_name(server_name)
+            server_dir = Path(MINECRAFT_HOST_DATA_DIR).resolve() / f"{safe_name} ({server_id})"
+            try:
+                server_dir.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Created/verified host directory: {server_dir}")
+            except OSError as e:
+                raise RuntimeError(f"Failed to create host directory {server_dir}: {e}")
+        else:
+            # PVC mode: Create PersistentVolumeClaim (existing logic)
+            pvc = client.V1PersistentVolumeClaim(
+                metadata=client.V1ObjectMeta(
+                    name=pvc_name,
+                    labels={
+                        "app": "fourdrinier",
+                        "component": "minecraft-server",
+                        "server-id": server_id,
+                    },
+                ),
+                spec=client.V1PersistentVolumeClaimSpec(
+                    access_modes=["ReadWriteOnce"],
+                    storage_class_name=MINECRAFT_STORAGE_CLASS,
+                    resources=client.V1ResourceRequirements(requests={"storage": MINECRAFT_PVC_SIZE}),
+                ),
+            )
 
-        try:
-            v1.create_namespaced_persistent_volume_claim(namespace, pvc)
-        except ApiException as e:
-            if e.status == 409:  # Already exists
-                pass  # Idempotent: PVC already exists
-            else:
-                raise RuntimeError(f"Failed to create PVC: {e}")
+            try:
+                v1.create_namespaced_persistent_volume_claim(namespace, pvc)
+            except ApiException as e:
+                if e.status == 409:  # Already exists
+                    pass  # Idempotent: PVC already exists
+                else:
+                    raise RuntimeError(f"Failed to create PVC: {e}")
 
         # Step 2: Create Pod
         # Build environment variables dynamically
@@ -223,9 +254,13 @@ async def start_container(
                 volumes=[
                     client.V1Volume(
                         name="data",
+                        host_path=client.V1HostPathVolumeSource(
+                            path=str(Path(MINECRAFT_HOST_DATA_DIR).resolve() / f"{sanitize_directory_name(server_name)} ({server_id})"),
+                            type="DirectoryOrCreate",
+                        ) if MINECRAFT_HOST_DATA_DIR else None,
                         persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
                             claim_name=pvc_name
-                        ),
+                        ) if not MINECRAFT_HOST_DATA_DIR else None,
                     )
                 ],
                 restart_policy="Always",
@@ -238,11 +273,14 @@ async def start_container(
             if e.status == 409:  # Already exists
                 pass  # Idempotent: Pod already exists
             else:
-                # Cleanup PVC if pod creation fails
-                try:
-                    v1.delete_namespaced_persistent_volume_claim(pvc_name, namespace)
-                except Exception:
-                    pass
+                # Cleanup on pod creation failure
+                # Note: In hostPath mode, preserve directory even on failure
+                # In PVC mode, clean up PVC
+                if not MINECRAFT_HOST_DATA_DIR:
+                    try:
+                        v1.delete_namespaced_persistent_volume_claim(pvc_name, namespace)
+                    except Exception:
+                        pass
                 raise RuntimeError(f"Failed to create Pod: {e}")
 
         # Step 3: Create LoadBalancer Service
@@ -277,10 +315,11 @@ async def start_container(
             if e.status == 409:  # Already exists
                 pass  # Idempotent: Service already exists
             else:
-                # Cleanup Pod and PVC if service creation fails
+                # Cleanup Pod and PVC/directory if service creation fails
                 try:
                     v1.delete_namespaced_pod(pod_name, namespace)
-                    v1.delete_namespaced_persistent_volume_claim(pvc_name, namespace)
+                    if not MINECRAFT_HOST_DATA_DIR:
+                        v1.delete_namespaced_persistent_volume_claim(pvc_name, namespace)
                 except Exception:
                     pass
                 raise RuntimeError(f"Failed to create Service: {e}")
@@ -465,12 +504,15 @@ async def stream_server_logs(server_id: str, tail_lines: int = 100):
             raise RuntimeError(f"Failed to retrieve logs: {e}")
 
 
-async def delete_server_resources(server_id: str) -> None:
+async def delete_server_resources(server_id: str, server_name: str | None = None) -> None:
     """
-    Delete all Kubernetes resources for a server (Pod, PVC, Service)
+    Delete all Kubernetes resources for a server (Pod, PVC, Service).
+
+    Note: In hostPath mode, directories are PRESERVED (not deleted).
 
     Args:
         server_id: Unique server ID
+        server_name: Server name (for logging in hostPath mode)
     """
     v1, namespace = get_k8s_client()
 
@@ -493,9 +535,19 @@ async def delete_server_resources(server_id: str) -> None:
         if e.status != 404:
             pass
 
-    # Delete PVC (immediate deletion as per requirements)
-    try:
-        v1.delete_namespaced_persistent_volume_claim(pvc_name, namespace)
-    except ApiException as e:
-        if e.status != 404:
-            pass
+    # Delete storage (PVC only - hostPath directories are preserved)
+    if MINECRAFT_HOST_DATA_DIR:
+        # Log preservation message
+        if server_name:
+            safe_name = sanitize_directory_name(server_name)
+            server_dir = Path(MINECRAFT_HOST_DATA_DIR).resolve() / f"{safe_name} ({server_id})"
+        else:
+            server_dir = Path(MINECRAFT_HOST_DATA_DIR).resolve() / server_id
+        logger.info(f"Server deleted - directory preserved at: {server_dir}")
+    else:
+        # Delete PVC (immediate deletion as per requirements)
+        try:
+            v1.delete_namespaced_persistent_volume_claim(pvc_name, namespace)
+        except ApiException as e:
+            if e.status != 404:
+                pass

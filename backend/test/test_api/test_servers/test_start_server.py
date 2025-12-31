@@ -239,3 +239,175 @@ async def test_start_server_006_nominal_paper_loader(
         (env for env in env_vars if env.name == "MODRINTH_DOWNLOAD_DEPENDENCIES"), None
     )
     assert modrinth_deps_env is None
+
+
+@pytest.mark.asyncio
+async def test_start_server_007_nominal_hostpath_mode(
+    client: AsyncClient, test_db: AsyncSession, mock_k8s_client: MagicMock, tmp_path
+) -> None:
+    """
+    Test 007 - Nominal
+    Conditions: MINECRAFT_HOST_DATA_DIR is set, server uses hostPath instead of PVC
+    Result: HTTP 201 - Pod created with hostPath volume, directory created
+    """
+    import fourdrinier.core.config as config
+    import fourdrinier.dependencies.deploy.start_container as start_container_module
+
+    # Set host data dir to temp path
+    original_value = config.MINECRAFT_HOST_DATA_DIR
+    config.MINECRAFT_HOST_DATA_DIR = str(tmp_path)
+    start_container_module.MINECRAFT_HOST_DATA_DIR = str(tmp_path)
+
+    try:
+        # Add server
+        server = Server(
+            id="test-hostpath",
+            name="Test Server",
+            loader="paper",
+            game_version="1.21.1"
+        )
+        test_db.add(server)
+        await test_db.commit()
+
+        # Start the server
+        response: Response = await client.post("/servers/test-hostpath/start")
+
+        # Verify response
+        assert response.status_code == 201
+        assert "pod" in response.json()
+
+        # Verify directory was created
+        expected_dir = tmp_path / "Test Server (test-hostpath)"
+        assert expected_dir.exists()
+        assert expected_dir.is_dir()
+
+        # Verify Pod was created with hostPath volume (not PVC)
+        pod_call_args = mock_k8s_client.create_namespaced_pod.call_args
+        pod_spec = pod_call_args[0][1]
+        volume = pod_spec.spec.volumes[0]
+        assert volume.host_path is not None
+        assert volume.host_path.path == str(expected_dir)
+        assert volume.persistent_volume_claim is None
+
+        # Verify PVC was NOT created in hostPath mode
+        mock_k8s_client.create_namespaced_persistent_volume_claim.assert_not_called()
+
+    finally:
+        # Restore original config
+        config.MINECRAFT_HOST_DATA_DIR = original_value
+        start_container_module.MINECRAFT_HOST_DATA_DIR = original_value
+
+
+@pytest.mark.asyncio
+async def test_start_server_008_nominal_hostpath_sanitize_name(
+    client: AsyncClient, test_db: AsyncSession, mock_k8s_client: MagicMock, tmp_path
+) -> None:
+    """
+    Test 008 - Nominal
+    Conditions: hostPath mode with server name containing unsafe filesystem characters
+    Result: HTTP 201 - Directory created with sanitized name
+    """
+    import fourdrinier.core.config as config
+    import fourdrinier.dependencies.deploy.start_container as start_container_module
+
+    # Set host data dir to temp path
+    original_value = config.MINECRAFT_HOST_DATA_DIR
+    config.MINECRAFT_HOST_DATA_DIR = str(tmp_path)
+    start_container_module.MINECRAFT_HOST_DATA_DIR = str(tmp_path)
+
+    try:
+        # Add server with unsafe characters in name
+        server = Server(
+            id="test-sanitize",
+            name="My/Server:Test*<>?",
+            loader="paper",
+            game_version="1.21.1"
+        )
+        test_db.add(server)
+        await test_db.commit()
+
+        # Start the server
+        response: Response = await client.post("/servers/test-sanitize/start")
+
+        # Verify response
+        assert response.status_code == 201
+        assert "pod" in response.json()
+
+        # Verify directory was created with sanitized name
+        # Expected: "My_Server_Test_____ (test-sanitize)"
+        expected_dir = tmp_path / "My_Server_Test_____ (test-sanitize)"
+        assert expected_dir.exists()
+        assert expected_dir.is_dir()
+
+        # Verify Pod was created with correct hostPath
+        pod_call_args = mock_k8s_client.create_namespaced_pod.call_args
+        pod_spec = pod_call_args[0][1]
+        volume = pod_spec.spec.volumes[0]
+        assert volume.host_path is not None
+        assert volume.host_path.path == str(expected_dir)
+
+    finally:
+        # Restore original config
+        config.MINECRAFT_HOST_DATA_DIR = original_value
+        start_container_module.MINECRAFT_HOST_DATA_DIR = original_value
+
+
+@pytest.mark.asyncio
+async def test_delete_server_009_hostpath_preserved(
+    client: AsyncClient, test_db: AsyncSession, mock_k8s_client: MagicMock, tmp_path
+) -> None:
+    """
+    Test 009 - Nominal
+    Conditions: Delete server in hostPath mode
+    Result: HTTP 200 - Directory is preserved (not deleted)
+    """
+    import fourdrinier.core.config as config
+    import fourdrinier.dependencies.deploy.start_container as start_container_module
+
+    # Set host data dir to temp path
+    original_value = config.MINECRAFT_HOST_DATA_DIR
+    config.MINECRAFT_HOST_DATA_DIR = str(tmp_path)
+    start_container_module.MINECRAFT_HOST_DATA_DIR = str(tmp_path)
+
+    try:
+        # Create server and directory manually
+        server = Server(
+            id="test-delete",
+            name="Delete Test",
+            loader="paper",
+            game_version="1.21.1"
+        )
+        test_db.add(server)
+        await test_db.commit()
+
+        # Create directory manually to simulate a started server
+        server_dir = tmp_path / "Delete Test (test-delete)"
+        server_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create a test file in the directory
+        test_file = server_dir / "world" / "level.dat"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text("test data")
+
+        # Verify directory exists before deletion
+        assert server_dir.exists()
+        assert test_file.exists()
+
+        # Delete the server
+        response: Response = await client.delete("/servers/test-delete")
+
+        # Verify response
+        assert response.status_code == 200
+
+        # Verify directory is PRESERVED
+        assert server_dir.exists()
+        assert test_file.exists()
+        assert test_file.read_text() == "test data"
+
+        # Verify PVC deletion was NOT attempted (we're in hostPath mode)
+        mock_k8s_client.delete_namespaced_persistent_volume_claim.assert_not_called()
+
+    finally:
+        # Restore original config
+        config.MINECRAFT_HOST_DATA_DIR = original_value
+        start_container_module.MINECRAFT_HOST_DATA_DIR = original_value
