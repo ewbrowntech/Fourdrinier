@@ -207,6 +207,7 @@ async def start_container(
         # Build environment variables dynamically
         env_vars = [
             client.V1EnvVar(name="EULA", value="true"),
+            client.V1EnvVar(name="TYPE", value=loader.upper()),
             client.V1EnvVar(name="VERSION", value=game_version),
             client.V1EnvVar(name="MOTD", value="A Fourdrinier Server"),
         ]
@@ -218,6 +219,7 @@ async def start_container(
             env_vars.extend([
                 client.V1EnvVar(name="MODRINTH_PROJECTS", value=projects_str),
                 client.V1EnvVar(name="MODRINTH_DOWNLOAD_DEPENDENCIES", value="required"),
+                client.V1EnvVar(name="MODRINTH_ALLOWED_VERSION_TYPE", value="alpha"),
             ])
 
         pod = client.V1Pod(
