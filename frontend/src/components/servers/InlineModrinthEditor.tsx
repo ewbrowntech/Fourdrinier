@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Pencil, X, Check, Plus, Download, ExternalLink } from 'lucide-react';
-import type { Server, ModrinthProjectInfo } from '@/lib/api/types';
+import type { Server, ModrinthProjectEnriched } from '@/lib/api/types';
 import { toast } from 'sonner';
 import { importCollection } from '@/lib/api/servers';
 import { getModrinthProjects } from '@/lib/api/modrinth';
@@ -24,35 +24,9 @@ export function InlineModrinthEditor({ server, onUpdate, disabled }: InlineModri
   const [projects, setProjects] = useState<string[]>(server.modrinth_projects || []);
   const [collectionUrl, setCollectionUrl] = useState('');
   const [isImporting, setIsImporting] = useState(false);
-  const [projectInfoMap, setProjectInfoMap] = useState<Record<string, ModrinthProjectInfo>>({});
+  const [projectInfoMap, setProjectInfoMap] = useState<Record<string, ModrinthProjectEnriched>>({});
 
   const isFabric = server.loader === 'fabric';
-
-  // Fetch enriched metadata when editing starts or projects change
-  useEffect(() => {
-    if (!isEditing || projects.length === 0) {
-      return;
-    }
-
-    const missingProjects = projects.filter((projectId) => !projectInfoMap[projectId]);
-    if (missingProjects.length === 0) {
-      return;
-    }
-
-    getModrinthProjects(missingProjects)
-      .then((projectsData) => {
-        setProjectInfoMap((prev) => {
-          const next = { ...prev };
-          projectsData.forEach((project) => {
-            next[project.project_id] = project;
-          });
-          return next;
-        });
-      })
-      .catch((err) => {
-        console.error('Failed to resolve Modrinth project metadata:', err);
-      });
-  }, [projects, isEditing, projectInfoMap]);
 
   // Sync with server prop when it changes
   useEffect(() => {
@@ -61,13 +35,33 @@ export function InlineModrinthEditor({ server, onUpdate, disabled }: InlineModri
     }
   }, [server.modrinth_projects, isEditing]);
 
+  // Fetch enriched metadata with compatibility info whenever server's mods change
+  useEffect(() => {
+    if (!server.modrinth_projects || server.modrinth_projects.length === 0 || !isFabric) {
+      setProjectInfoMap({});
+      return;
+    }
+
+    getModrinthProjects(server.modrinth_projects, server.game_version, server.loader)
+      .then((projectsData) => {
+        const nextMap: Record<string, ModrinthProjectEnriched> = {};
+        projectsData.forEach((project) => {
+          nextMap[project.project_id] = project;
+        });
+        setProjectInfoMap(nextMap);
+      })
+      .catch((err) => {
+        console.error('Failed to resolve Modrinth project metadata:', err);
+        setProjectInfoMap({});
+      });
+  }, [server.modrinth_projects, server.game_version, server.loader, isFabric]);
+
   const handleEdit = () => {
     if (!isFabric) {
       toast.error('Modrinth projects are only available for Fabric servers');
       return;
     }
     setProjects(server.modrinth_projects || []);
-    setProjectInfoMap({});
     setIsEditing(true);
   };
 
@@ -107,8 +101,8 @@ export function InlineModrinthEditor({ server, onUpdate, disabled }: InlineModri
 
       // Refresh enriched metadata after import
       if (result.projects.length > 0) {
-        const projectsData = await getModrinthProjects(result.projects);
-        const nextMap: Record<string, ModrinthProjectInfo> = {};
+        const projectsData = await getModrinthProjects(result.projects, server.game_version, server.loader);
+        const nextMap: Record<string, ModrinthProjectEnriched> = {};
         projectsData.forEach((project) => {
           nextMap[project.project_id] = project;
         });
@@ -148,11 +142,16 @@ export function InlineModrinthEditor({ server, onUpdate, disabled }: InlineModri
                 const projectInfo = projectInfoMap[projectId];
                 const displayName = projectInfo?.title || projectId;
                 const modrinthUrl = `https://modrinth.com/mod/${projectId}`;
+                const isIncompatible = projectInfo && !projectInfo.compatible;
 
                 return (
                   <Tooltip key={projectId}>
                     <TooltipTrigger asChild>
-                      <div className="bg-secondary text-secondary-foreground px-2 py-1 rounded-md text-sm flex items-center gap-1.5">
+                      <div className={`px-2 py-1 rounded-md text-sm flex items-center gap-1.5 ${
+                        isIncompatible
+                          ? 'bg-yellow-500/20 text-yellow-900 dark:text-yellow-100 border border-yellow-500/50'
+                          : 'bg-secondary text-secondary-foreground'
+                      }`}>
                         {projectInfo?.icon_url && (
                           <img
                             src={projectInfo.icon_url}
@@ -163,17 +162,30 @@ export function InlineModrinthEditor({ server, onUpdate, disabled }: InlineModri
                         <span>{displayName}</span>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent>
-                      <a
-                        href={modrinthUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        View on Modrinth
-                      </a>
+                    <TooltipContent className="max-w-xs">
+                      <div className="space-y-2">
+                        {projectInfo?.summary && (
+                          <p className="text-xs text-muted-foreground">{projectInfo.summary}</p>
+                        )}
+                        {isIncompatible && projectInfo.warnings.length > 0 && (
+                          <div className="text-xs text-yellow-600 dark:text-yellow-400">
+                            <div className="font-semibold mb-1">Incompatible:</div>
+                            {projectInfo.warnings.map((warning, idx) => (
+                              <div key={idx}>{warning}</div>
+                            ))}
+                          </div>
+                        )}
+                        <a
+                          href={modrinthUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          View on Modrinth
+                        </a>
+                      </div>
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -202,11 +214,16 @@ export function InlineModrinthEditor({ server, onUpdate, disabled }: InlineModri
               const projectInfo = projectInfoMap[projectId];
               const displayName = projectInfo?.title || projectId;
               const modrinthUrl = `https://modrinth.com/mod/${projectId}`;
+              const isIncompatible = projectInfo && !projectInfo.compatible;
 
               return (
                 <Tooltip key={projectId}>
                   <TooltipTrigger asChild>
-                    <div className="bg-secondary text-secondary-foreground px-3 py-1 rounded-md text-sm flex items-center gap-2">
+                    <div className={`px-3 py-1 rounded-md text-sm flex items-center gap-2 ${
+                      isIncompatible
+                        ? 'bg-yellow-500/20 text-yellow-900 dark:text-yellow-100 border border-yellow-500/50'
+                        : 'bg-secondary text-secondary-foreground'
+                    }`}>
                       {projectInfo?.icon_url && (
                         <img
                           src={projectInfo.icon_url}
@@ -224,17 +241,30 @@ export function InlineModrinthEditor({ server, onUpdate, disabled }: InlineModri
                       </button>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <a
-                      href={modrinthUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      View on Modrinth
-                    </a>
+                  <TooltipContent className="max-w-xs">
+                    <div className="space-y-2">
+                      {projectInfo?.summary && (
+                        <p className="text-xs text-muted-foreground">{projectInfo.summary}</p>
+                      )}
+                      {isIncompatible && projectInfo.warnings.length > 0 && (
+                        <div className="text-xs text-yellow-600 dark:text-yellow-400">
+                          <div className="font-semibold mb-1">Incompatible:</div>
+                          {projectInfo.warnings.map((warning, idx) => (
+                            <div key={idx}>{warning}</div>
+                          ))}
+                        </div>
+                      )}
+                      <a
+                        href={modrinthUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        View on Modrinth
+                      </a>
+                    </div>
                   </TooltipContent>
                 </Tooltip>
               );

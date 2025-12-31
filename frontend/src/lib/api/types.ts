@@ -70,6 +70,16 @@ export interface ModrinthProjectInfo {
   icon_url?: string | null;
 }
 
+export interface ModrinthProjectEnriched {
+  project_id: string;
+  title: string;
+  summary: string;
+  description: string;
+  icon_url?: string | null;
+  compatible: boolean;
+  warnings: string[];
+}
+
 export interface IncompatibleProject {
   project_id: string;
   title: string;

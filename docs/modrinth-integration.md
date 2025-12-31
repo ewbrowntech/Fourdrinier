@@ -101,11 +101,6 @@ The `modrinth_projects` field is stored as JSON, allowing flexible list manageme
 
 ### Core Endpoints
 
-#### `GET /modrinth-projects/{server_id}`
-- Fetches metadata for server's projects
-- Validates compatibility against server's game_version and loader
-- Returns `ModrinthProjectEnriched[]` with compatibility flags
-
 #### `POST /modrinth-projects/lookup`
 - Takes list of project IDs/slugs
 - Returns basic metadata without compatibility checks
@@ -146,17 +141,23 @@ The container initialization script uses these variables to download mods from M
 
 **File:** `frontend/src/lib/api/modrinth.ts`
 
-Direct Modrinth API client for browser-based metadata fetching:
+Direct Modrinth API client for browser-based metadata fetching with compatibility validation:
 
 ```typescript
-getModrinthProjects(projectIds: string[]): Promise<ModrinthProjectInfo[]>
+getModrinthProjects(
+  projectIds: string[],
+  gameVersion: string,
+  loader: string
+): Promise<ModrinthProjectEnriched[]>
 ```
 
 - Fetches projects directly from Modrinth API v3
 - Batches requests in groups of 100
 - Deduplicates project IDs
-- Maps Modrinth API response (`name`, `description`, `icon_url`) to internal `ModrinthProjectInfo` format
-- Handles the API's `name` field by mapping it to our internal `title` field for consistency
+- **Performs client-side compatibility validation** against game version and loader
+- Returns enriched metadata with `compatible` flag and `warnings` array
+- Maps Modrinth API response fields (`title`, `description`, `icon_url`, `game_versions`, `loaders`) to internal format
+- Eliminates need for backend metadata endpoint, reducing server load
 
 ### 2. UI Components
 
@@ -177,11 +178,11 @@ getModrinthProjects(projectIds: string[]): Promise<ModrinthProjectInfo[]>
 - Shows enriched project info (title, icons) via metadata lookup
 - Simple manual project addition via prompt
 
-#### EditServerDialog
+#### InlineModrinthEditor
 
-**File:** `frontend/src/components/servers/EditServerDialog.tsx`
+**File:** `frontend/src/components/servers/InlineModrinthEditor.tsx`
 
-Full mod management interface for existing servers:
+Full mod management interface used in server detail pages:
 - Add individual projects manually
 - **Import collections** - full Modrinth collection import UI:
   - Accepts collection URL
@@ -189,17 +190,24 @@ Full mod management interface for existing servers:
   - Shows warnings/incompatibilities to user
   - Refreshes metadata display
 - Shows existing projects as pills with mod icons
-- Tooltips on mod pills provide clickable links to Modrinth mod pages
+- **Compatibility indicators**:
+  - Compatible mods: standard gray pills
+  - Incompatible mods: yellow pills with warning border
+- Tooltips on mod pills show:
+  - Incompatibility warnings with supported versions/loaders
+  - Clickable links to Modrinth mod pages
 - Disables Modrinth features for non-Fabric servers
+- Fetches enriched metadata directly from Modrinth API with client-side validation
 
 #### ServerDetailPage
 
 **File:** `frontend/src/pages/ServerDetailPage.tsx`
 
 - Shows detailed server information
-- Displays all mods as pills with mod names
-- Tooltips on mod pills provide clickable links to Modrinth mod pages (with ExternalLink icon)
-- Full edit dialog available for mod management
+- Displays all mods as pills with mod names and icons
+- **Visual compatibility feedback**: incompatible mods highlighted in yellow
+- Tooltips on mod pills show warnings and provide clickable links to Modrinth
+- Full inline edit capability for mod management
 - Real-time server logs alongside configuration
 
 ---
@@ -292,13 +300,16 @@ Frontend:
 - Graceful handling of 429 (rate limit) responses
 - Per-project error handling in batch operations
 
-### 3. Lazy Metadata Loading
+### 3. Client-Side Validation & Metadata Loading
 
-- Frontend fetches enriched metadata on-demand for display
-- Doesn't require backend call for each project
-- Direct Modrinth API access from browser
-- Reduces backend API load
-- API response field mapping: Modrinth's `name` field is mapped to internal `title` field
+- Frontend fetches enriched metadata directly from Modrinth API
+- **Performs compatibility validation in the browser**:
+  - Checks game version against project's `game_versions` array
+  - Checks loader against project's `loaders` array (case-insensitive)
+  - Generates user-friendly warning messages
+- Doesn't require backend metadata endpoint
+- Reduces backend API load and latency
+- Real-time compatibility feedback in UI with yellow warning indicators
 
 ### 4. Metadata Caching
 
@@ -318,13 +329,14 @@ Frontend:
 
 | Component | Role | Key Integration |
 |-----------|------|-----------------|
-| `modrinth_client.py` | API communication | Fetches data from Modrinth v3 API |
-| `compatibility_validator.py` | Validation logic | Checks mods vs server config |
+| `modrinth_client.py` | API communication | Fetches data from Modrinth v3 API (backend) |
+| `compatibility_validator.py` | Validation logic | Server-side validation for startup safety |
 | `start_container.py` | Deployment safety | Blocks incompatible mod startups |
-| `servers.py` (API) | Business logic | Orchestrates validation, collection imports |
-| `modrinth.ts` (Frontend) | Direct API | Browser-based metadata enrichment, maps API fields |
-| React Components | UI/UX | User interactions, displays mods with tooltips |
-| Tooltip Component | User experience | Provides clickable Modrinth links on mod pills |
+| `servers.py` (API) | Business logic | Orchestrates server operations, collection imports |
+| `modrinth.ts` (Frontend) | Direct API + Validation | Browser-based metadata + client-side compatibility checking |
+| React Components | UI/UX | User interactions, displays mods with visual compatibility indicators |
+| InlineModrinthEditor | Mod management | Editable mod pills with yellow warnings for incompatible mods |
+| Tooltip Component | User experience | Shows compatibility warnings and Modrinth links |
 | Database | Persistence | Stores modrinth_projects list as JSON |
 
 ---
