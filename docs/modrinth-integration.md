@@ -155,7 +155,8 @@ getModrinthProjects(projectIds: string[]): Promise<ModrinthProjectInfo[]>
 - Fetches projects directly from Modrinth API v3
 - Batches requests in groups of 100
 - Deduplicates project IDs
-- Maps response to `ModrinthProjectInfo` format
+- Maps Modrinth API response (`name`, `description`, `icon_url`) to internal `ModrinthProjectInfo` format
+- Handles the API's `name` field by mapping it to our internal `title` field for consistency
 
 ### 2. UI Components
 
@@ -187,7 +188,8 @@ Full mod management interface for existing servers:
   - Calls backend `/import-collection` endpoint
   - Shows warnings/incompatibilities to user
   - Refreshes metadata display
-- Shows existing projects with metadata
+- Shows existing projects as pills with mod icons
+- Tooltips on mod pills provide clickable links to Modrinth mod pages
 - Disables Modrinth features for non-Fabric servers
 
 #### ServerDetailPage
@@ -195,7 +197,8 @@ Full mod management interface for existing servers:
 **File:** `frontend/src/pages/ServerDetailPage.tsx`
 
 - Shows detailed server information
-- Displays all mods with descriptions and icons
+- Displays all mods as pills with mod names
+- Tooltips on mod pills provide clickable links to Modrinth mod pages (with ExternalLink icon)
 - Full edit dialog available for mod management
 - Real-time server logs alongside configuration
 
@@ -295,6 +298,7 @@ Frontend:
 - Doesn't require backend call for each project
 - Direct Modrinth API access from browser
 - Reduces backend API load
+- API response field mapping: Modrinth's `name` field is mapped to internal `title` field
 
 ### 4. Metadata Caching
 
@@ -318,8 +322,9 @@ Frontend:
 | `compatibility_validator.py` | Validation logic | Checks mods vs server config |
 | `start_container.py` | Deployment safety | Blocks incompatible mod startups |
 | `servers.py` (API) | Business logic | Orchestrates validation, collection imports |
-| `modrinth.ts` (Frontend) | Direct API | Browser-based metadata enrichment |
-| React Components | UI/UX | User interactions, displays mods |
+| `modrinth.ts` (Frontend) | Direct API | Browser-based metadata enrichment, maps API fields |
+| React Components | UI/UX | User interactions, displays mods with tooltips |
+| Tooltip Component | User experience | Provides clickable Modrinth links on mod pills |
 | Database | Persistence | Stores modrinth_projects list as JSON |
 
 ---
