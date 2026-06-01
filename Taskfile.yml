@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+tasks:
+  debug:
+    desc: Run the backend in debug mode (Docker Compose)
+    cmds:
+      - docker compose --profile debug up
+
+  debug:build:
+    desc: Rebuild the debug image and run — use after Dockerfile changes or when the container environment is stale
+    cmds:
+      - docker compose --profile debug up --build
