@@ -1,11 +1,14 @@
 """Application entrypoint.
 
-Debug:
-    uvicorn with auto-reload.
+Server mode is chosen from ``ENV``:
 
-Production:
-    gunicorn managing multiple uvicorn workers. Worker count defaults to
-    (2 * CPU cores) + 1 and can be overridden with WEB_CONCURRENCY.
+``debug``:
+    uvicorn with auto-reload. Use for local development only.
+
+``dev``, ``stage``, ``prod``, ``test``:
+    gunicorn managing uvicorn workers. Use for deployed environments,
+    local prod-like runs, and CI. Worker count defaults to
+    (2 * CPU cores) + 1 and can be overridden with ``WEB_CONCURRENCY``.
 """
 
 from __future__ import annotations
@@ -69,10 +72,10 @@ def prod() -> None:
 
 
 def run() -> None:
-    if SETTINGS.is_production:
-        prod()
-    else:
+    if SETTINGS.is_debug_server:
         debug()
+    else:
+        prod()
 
 
 if __name__ == "__main__":

@@ -9,10 +9,10 @@ tasks:
     cmds:
       - uv run python -m fourdrinier.main
 
-  prod:
-    desc: Run the API with gunicorn + uvicorn workers
+  prod-like:
+    desc: Run the API with gunicorn + uvicorn workers (ENV=prod)
     deps: [sync]
     env:
-      ENV: production
+      ENV: prod
     cmds:
       - uv run python -m fourdrinier.main

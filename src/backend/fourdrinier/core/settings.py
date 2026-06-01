@@ -10,7 +10,7 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["critical", "error", "warning", "info", "debug", "trace"]
-AppEnv = Literal["debug", "test", "development", "production"]
+AppEnv = Literal["debug", "dev", "stage", "prod", "test"]
 
 # src/backend/fourdrinier/core/settings.py -> repo root (fourdrinier/)
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    env: AppEnv = "development"
+    env: AppEnv = "dev"
     host: str = "0.0.0.0"
     port: int = Field(default=8000, ge=1, le=65535)
 
@@ -57,8 +57,9 @@ class Settings(BaseSettings):
         return value
 
     @property
-    def is_production(self) -> bool:
-        return self.env == "production"
+    def is_debug_server(self) -> bool:
+        """True when running uvicorn with auto-reload (local development only)."""
+        return self.env == "debug"
 
     def worker_count(self) -> int:
         if self.web_concurrency is not None:
