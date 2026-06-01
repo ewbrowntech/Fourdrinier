@@ -1,0 +1,15 @@
+[project]
+name = "fourdrinier"
+version = "0.1.0"
+description = "Fourdrinier backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "gunicorn>=23.0.0",
+    "pydantic-settings>=2.7.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
