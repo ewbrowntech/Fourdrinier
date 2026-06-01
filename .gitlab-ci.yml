@@ -4,9 +4,11 @@ stages:
 
 include:
   - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
 
 variables:
   SAST_EXCLUDED_PATHS: "spec, test, tests, tmp, .venv, **/.venv"
+  SECRET_DETECTION_EXCLUDED_PATHS: "spec, test, tests, tmp, .venv, **/.venv"
   IMAGE_TAR: image.tar
 
 .pipeline_rules:
