@@ -1,8 +1,0 @@
-[flake8]
-max-line-length = 100
-max-complexity = 10
-extend-ignore = E203,E501
-extend-select = B9
-max-complexity = 10
-style=google
-allow_init_docstring = True

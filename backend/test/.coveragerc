@@ -1,7 +1,0 @@
-[run]
-omit = 
-    backend/tests/*
-    */__init__.py
-    backend/fourdrinier/alembic/env.py
-    backend/fourdrinier/db/session.py
-    
