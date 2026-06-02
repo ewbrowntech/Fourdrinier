@@ -1,8 +1,17 @@
 {
+  "python.envFile": "${workspaceFolder}/.env",
   "files.exclude": {
     "**/__pycache__": true
   },
   "search.exclude": {
     "**/__pycache__": true
+  },
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.markdownlint": "explicit"
+  },
+  "[markdown]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "vscode.markdown-language-features"
   }
 }
