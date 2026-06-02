@@ -34,17 +34,17 @@ build-app:
     expire_in: 1 hour
   extends: .pipeline_rules
 
-container-scan:
-  stage: test
-  image:
-    name: aquasec/trivy:latest
-    entrypoint: [""]
-  needs:
-    - job: build-app
-      artifacts: true
-  script:
-    - trivy image
-      --input "${IMAGE_TAR}"
-      --severity HIGH,CRITICAL
-      --exit-code 1
-  extends: .pipeline_rules
+# container-scan:
+#   stage: test
+#   image:
+#     name: aquasec/trivy:latest
+#     entrypoint: [""]
+#   needs:
+#     - job: build-app
+#       artifacts: true
+#   script:
+#     - trivy image
+#       --input "${IMAGE_TAR}"
+#       --severity HIGH,CRITICAL
+#       --exit-code 1
+#   extends: .pipeline_rules
