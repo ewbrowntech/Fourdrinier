@@ -10,6 +10,7 @@ services:
     environment:
       ENV: debug
       PORT: 8000
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     volumes:
       - ./src/backend/fourdrinier:/app/backend/fourdrinier
       - ./src/backend/pyproject.toml:/app/backend/pyproject.toml

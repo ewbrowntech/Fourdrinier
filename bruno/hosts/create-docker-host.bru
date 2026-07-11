@@ -13,9 +13,9 @@ post {
 body:json {
   {
     "name": "remote-docker",
-    "address": "192.168.1.50",
+    "address": "host.docker.internal",
     "port": 22,
-    "username": "docker",
+    "username": "{{username}}",
     "keypair_id": "{{keypairId}}",
     "enabled": true,
     "labels": {

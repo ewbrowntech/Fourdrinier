@@ -10,6 +10,12 @@ get {
   auth: none
 }
 
+script:post-response {
+  if (res.status === 200 && Array.isArray(res.body) && res.body.length === 1 && res.body[0].id) {
+    bru.setEnvVar("keypairId", res.body[0].id);
+  }
+}
+
 tests {
   test("should list keypairs", function() {
     expect(res.status).to.equal(200);
