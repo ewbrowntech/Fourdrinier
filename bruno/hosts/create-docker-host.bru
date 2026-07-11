@@ -1,0 +1,41 @@
+meta {
+  name: Create Docker host
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/hosts
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "local-docker",
+    "kind": "docker",
+    "enabled": true,
+    "connection": {
+      "host": "unix:///var/run/docker.sock",
+      "tls": false
+    },
+    "labels": {
+      "env": "local"
+    }
+  }
+}
+
+script:post-response {
+  if (res.status === 201 && res.body && res.body.id) {
+    bru.setEnvVar("hostId", res.body.id);
+  }
+}
+
+tests {
+  test("should create docker host", function() {
+    expect(res.status).to.equal(201);
+    expect(res.body).to.have.property("id");
+    expect(res.body.kind).to.equal("docker");
+    expect(res.body.name).to.equal("local-docker");
+  });
+}
