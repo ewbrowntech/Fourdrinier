@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = Field(default=8000, ge=1, le=65535)
 
+    # Async SQLite by default; override with DATABASE_URL.
+    # Relative path resolves against process CWD (backend package root locally and in Docker).
+    database_url: str = "sqlite+aiosqlite:///./data/fourdrinier.db"
+
     log_level: LogLevel = "info"
 
     docs_url: str | None = "/docs"

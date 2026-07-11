@@ -7,8 +7,6 @@ services:
       target: debug
     ports:
       - "127.0.0.1:${PORT:-8000}:8000"
-    env_file:
-      - .env
     environment:
       ENV: debug
       PORT: 8000
@@ -16,3 +14,6 @@ services:
       - ./src/backend/fourdrinier:/app/backend/fourdrinier
       - ./src/backend/pyproject.toml:/app/backend/pyproject.toml
       - ./src/backend/uv.lock:/app/backend/uv.lock
+      - ./src/backend/alembic:/app/backend/alembic
+      - ./src/backend/alembic.ini:/app/backend/alembic.ini
+      - ./src/backend/data:/app/backend/data

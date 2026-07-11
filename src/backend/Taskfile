@@ -1,9 +1,14 @@
 version: "3"
 
 tasks:
+  sync:
+    desc: Install project dependencies with uv
+    cmds:
+      - uv sync
+
   dev:
     desc: Run the API with uvicorn and auto-reload (ENV=debug)
-    deps: [sync]
+    deps: [sync, migrate]
     env:
       ENV: debug
     cmds:
@@ -16,3 +21,15 @@ tasks:
       ENV: prod
     cmds:
       - uv run python -m fourdrinier.main
+
+  migrate:
+    desc: Apply Alembic migrations to head
+    deps: [sync]
+    cmds:
+      - uv run alembic upgrade head
+
+  revision:
+    desc: Autogenerate an Alembic revision (usage: task revision -- "message")
+    deps: [sync]
+    cmds:
+      - uv run alembic revision --autogenerate -m "{{.CLI_ARGS}}"

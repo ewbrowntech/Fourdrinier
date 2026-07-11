@@ -84,4 +84,4 @@ WORKDIR /app/backend
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uv sync && exec python -m fourdrinier.main"]
+CMD ["sh", "-c", "uv sync && alembic upgrade head && exec python -m fourdrinier.main"]
