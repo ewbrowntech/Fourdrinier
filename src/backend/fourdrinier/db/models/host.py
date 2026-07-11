@@ -1,40 +1,40 @@
-"""Host ORM model — Docker or Kubernetes runtime targets."""
+"""DockerHost ORM model — remote Docker daemons reached over SSH."""
 
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Enum, Index, String, Uuid, func, text, true
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    Uuid,
+    func,
+    text,
+    true,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from fourdrinier.db.base import Base
-
-JsonObject = dict[str, Any]
-
-
-class HostKind(str, enum.Enum):
-    """Runtime target kind."""
-
-    DOCKER = "docker"
-    KUBERNETES = "kubernetes"
+from fourdrinier.db.models.ssh_keypair import SSHKeypair
 
 
-def _host_kind_values(enum_cls: type[HostKind]) -> list[str]:
-    return [member.value for member in enum_cls]
+class DockerHost(Base):
+    """A remote Docker daemon reachable via ``ssh://username@address:port``.
 
+    The ``host_key_*`` columns implement trust-on-first-use: they are NULL
+    until the first successful connection records the server's host key, after
+    which any mismatch is rejected.
+    """
 
-class Host(Base):
-    """A configurable runtime host (Docker daemon or Kubernetes cluster)."""
-
-    __tablename__ = "hosts"
-    __table_args__ = (
-        Index("ix_hosts_kind", "kind"),
-        Index("ix_hosts_enabled", "enabled"),
-    )
+    __tablename__ = "docker_hosts"
+    __table_args__ = (Index("ix_docker_hosts_enabled", "enabled"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -42,14 +42,17 @@ class Host(Base):
         default=uuid.uuid4,
     )
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    kind: Mapped[HostKind] = mapped_column(
-        Enum(
-            HostKind,
-            name="host_kind",
-            native_enum=False,
-            values_callable=_host_kind_values,
-            length=32,
-        ),
+    address: Mapped[str] = mapped_column(String(255), nullable=False)
+    port: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=22,
+        server_default=text("22"),
+    )
+    username: Mapped[str] = mapped_column(String(255), nullable=False)
+    keypair_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ssh_keypairs.id"),
         nullable=False,
     )
     enabled: Mapped[bool] = mapped_column(
@@ -58,12 +61,18 @@ class Host(Base):
         server_default=true(),
         default=True,
     )
-    connection: Mapped[JsonObject] = mapped_column(JSON, nullable=False)
     labels: Mapped[dict[str, str]] = mapped_column(
         JSON,
         nullable=False,
         default=dict,
         server_default=text("'{}'"),
+    )
+    host_key_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    host_key_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
+    host_key_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -77,5 +86,7 @@ class Host(Base):
         onupdate=func.now(),
     )
 
+    keypair: Mapped[SSHKeypair] = relationship(lazy="joined")
 
-__all__ = ["Host", "HostKind"]
+
+__all__ = ["DockerHost"]

@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # Relative path resolves against process CWD (backend package root locally and in Docker).
     database_url: str = "sqlite+aiosqlite:///./data/fourdrinier.db"
 
+    # Fernet key used to encrypt secrets at rest (SSH private keys).
+    # Generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Validated lazily by core.crypto so the app can boot without it until a
+    # secret actually needs to be encrypted or decrypted.
+    encryption_key: str | None = None
+
     log_level: LogLevel = "info"
 
     docs_url: str | None = "/docs"

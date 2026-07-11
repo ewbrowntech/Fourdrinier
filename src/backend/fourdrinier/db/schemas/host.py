@@ -1,59 +1,67 @@
-"""Pydantic schemas for Host create/read payloads."""
+"""Pydantic schemas for DockerHost payloads."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from fourdrinier.db.models.host import HostKind
-from fourdrinier.db.schemas.host_connection import (
-    DockerConnection,
-    JsonObject,
-    KubernetesConnection,
-)
-
-HostConnection = DockerConnection | KubernetesConnection
+# Excludes characters that would change the meaning of the ssh:// URL the
+# backend builds from these fields.
+_ADDRESS_PATTERN = r"^[A-Za-z0-9._\-]+$"
+_USERNAME_PATTERN = r"^[A-Za-z0-9._\-]+$"
 
 
-class HostCreate(BaseModel):
-    """Payload to register a new host."""
+class DockerHostCreate(BaseModel):
+    """Payload to register a Docker host reachable over SSH."""
 
     name: str = Field(min_length=1, max_length=255)
-    kind: HostKind
-    connection: HostConnection
+    address: str = Field(max_length=255, pattern=_ADDRESS_PATTERN)
+    port: int = Field(default=22, ge=1, le=65535)
+    username: str = Field(max_length=255, pattern=_USERNAME_PATTERN)
+    keypair_id: uuid.UUID
     enabled: bool = True
     labels: dict[str, str] = Field(default_factory=dict)
 
-    @model_validator(mode="after")
-    def _validate_connection_for_kind(self) -> HostCreate:
-        if self.kind is HostKind.DOCKER and not isinstance(self.connection, DockerConnection):
-            raise ValueError("connection must match docker shape when kind is docker")
-        if self.kind is HostKind.KUBERNETES and not isinstance(
-            self.connection, KubernetesConnection
-        ):
-            raise ValueError("connection must match kubernetes shape when kind is kubernetes")
-        return self
 
-    def connection_payload(self) -> JsonObject:
-        """JSON-serializable connection dict for persistence."""
-        return self.connection.model_dump(mode="json", exclude_none=True)
-
-
-class HostRead(BaseModel):
-    """Host as returned by the API."""
+class DockerHostRead(BaseModel):
+    """Docker host as returned by the API."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str
-    kind: HostKind
+    address: str
+    port: int
+    username: str
+    keypair_id: uuid.UUID
     enabled: bool
-    connection: JsonObject
     labels: dict[str, str]
+    host_key_fingerprint: str | None
+    last_seen_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
 
-__all__ = ["HostConnection", "HostCreate", "HostRead"]
+class PingHostKey(BaseModel):
+    """Host key information reported by a ping."""
+
+    fingerprint: str
+    key_type: str
+    first_seen: bool
+
+
+class PingResponse(BaseModel):
+    """Successful connectivity check against a host's Docker daemon."""
+
+    status: str = "ok"
+    latency_ms: float
+    docker_version: str
+    api_version: str
+    os: str
+    arch: str
+    host_key: PingHostKey
+
+
+__all__ = ["DockerHostCreate", "DockerHostRead", "PingHostKey", "PingResponse"]

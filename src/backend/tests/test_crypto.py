@@ -1,0 +1,41 @@
+"""Tests for core.crypto."""
+
+from __future__ import annotations
+
+import pytest
+from cryptography.fernet import Fernet
+
+from fourdrinier.core.crypto import (
+    DecryptionError,
+    EncryptionKeyError,
+    decrypt_secret,
+    encrypt_secret,
+)
+from fourdrinier.core.settings import Settings
+
+
+def _settings(key: str | None) -> Settings:
+    return Settings(env="test", encryption_key=key)
+
+
+def test_round_trip() -> None:
+    settings = _settings(Fernet.generate_key().decode())
+    token = encrypt_secret(b"secret material", settings)
+    assert token != b"secret material"
+    assert decrypt_secret(token, settings) == b"secret material"
+
+
+def test_missing_key_raises() -> None:
+    with pytest.raises(EncryptionKeyError, match="ENCRYPTION_KEY is not set"):
+        encrypt_secret(b"x", _settings(None))
+
+
+def test_invalid_key_raises() -> None:
+    with pytest.raises(EncryptionKeyError, match="not a valid Fernet key"):
+        encrypt_secret(b"x", _settings("not-a-key"))
+
+
+def test_wrong_key_raises_decryption_error() -> None:
+    token = encrypt_secret(b"x", _settings(Fernet.generate_key().decode()))
+    with pytest.raises(DecryptionError):
+        decrypt_secret(token, _settings(Fernet.generate_key().decode()))

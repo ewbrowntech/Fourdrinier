@@ -1,39 +1,37 @@
-"""CRUD helpers for Host records."""
+"""CRUD helpers for DockerHost records."""
 
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from sqlalchemy import Select, select
 from sqlalchemy.engine import ScalarResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fourdrinier.db.models import Host, HostKind
-from fourdrinier.db.schemas import validate_host_connection
-
-JsonObject = dict[str, Any]
+from fourdrinier.db.models import DockerHost
 
 
 async def create_host(
     session: AsyncSession,
     *,
     name: str,
-    kind: HostKind,
-    connection: JsonObject,
+    address: str,
+    port: int,
+    username: str,
+    keypair_id: uuid.UUID,
     enabled: bool = True,
     labels: dict[str, str] | None = None,
-) -> Host:
+) -> DockerHost:
     """Persist a new host. Raises ``IntegrityError`` on duplicate name."""
-    normalized: JsonObject = validate_host_connection(kind, connection)
-    host_labels: dict[str, str] = labels if labels is not None else {}
-    host = Host(
+    host = DockerHost(
         name=name,
-        kind=kind,
-        connection=normalized,
+        address=address,
+        port=port,
+        username=username,
+        keypair_id=keypair_id,
         enabled=enabled,
-        labels=host_labels,
+        labels=labels if labels is not None else {},
     )
     session.add(host)
     try:
@@ -45,18 +43,22 @@ async def create_host(
     return host
 
 
-async def list_hosts(session: AsyncSession) -> list[Host]:
+async def list_hosts(session: AsyncSession) -> list[DockerHost]:
     """Return all hosts ordered by name."""
-    stmt: Select[tuple[Host]] = select(Host).order_by(Host.name)
-    result: ScalarResult[Host] = await session.scalars(stmt)
-    hosts: list[Host] = list(result.all())
-    return hosts
+    stmt: Select[tuple[DockerHost]] = select(DockerHost).order_by(DockerHost.name)
+    result: ScalarResult[DockerHost] = await session.scalars(stmt)
+    return list(result.all())
 
 
-async def get_host(session: AsyncSession, host_id: uuid.UUID) -> Host | None:
+async def get_host(session: AsyncSession, host_id: uuid.UUID) -> DockerHost | None:
     """Return a host by id, or ``None`` if missing."""
-    host: Host | None = await session.get(Host, host_id)
-    return host
+    return await session.get(DockerHost, host_id)
 
 
-__all__ = ["create_host", "get_host", "list_hosts"]
+async def delete_host(session: AsyncSession, host: DockerHost) -> None:
+    """Delete a host."""
+    await session.delete(host)
+    await session.commit()
+
+
+__all__ = ["create_host", "delete_host", "get_host", "list_hosts"]

@@ -1,19 +1,18 @@
 """Pydantic schemas for DB-backed domain objects."""
 
-from fourdrinier.db.schemas.host import HostConnection, HostCreate, HostRead
-from fourdrinier.db.schemas.host_connection import (
-    DockerConnection,
-    JsonObject,
-    KubernetesConnection,
-    validate_host_connection,
+from fourdrinier.db.schemas.host import (
+    DockerHostCreate,
+    DockerHostRead,
+    PingHostKey,
+    PingResponse,
 )
+from fourdrinier.db.schemas.ssh_keypair import KeypairCreate, KeypairRead
 
 __all__ = [
-    "DockerConnection",
-    "HostConnection",
-    "HostCreate",
-    "HostRead",
-    "JsonObject",
-    "KubernetesConnection",
-    "validate_host_connection",
+    "DockerHostCreate",
+    "DockerHostRead",
+    "KeypairCreate",
+    "KeypairRead",
+    "PingHostKey",
+    "PingResponse",
 ]

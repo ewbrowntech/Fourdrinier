@@ -1,0 +1,22 @@
+meta {
+  name: Get keypair
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/keypairs/{{keypairId}}
+  body: none
+  auth: none
+}
+
+params:path {
+  keypairId: {{keypairId}}
+}
+
+tests {
+  test("should get keypair by id", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.id).to.equal(bru.getEnvVar("keypairId"));
+  });
+}
