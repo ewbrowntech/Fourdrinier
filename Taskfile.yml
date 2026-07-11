@@ -2,6 +2,11 @@
 
 version: "3"
 
+includes:
+  backend:
+    taskfile: ./src/backend/Taskfile
+    dir: ./src/backend
+
 tasks:
   debug:
     desc: Run the backend in debug mode (Docker Compose)

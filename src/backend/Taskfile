@@ -29,7 +29,7 @@ tasks:
       - uv run alembic upgrade head
 
   revision:
-    desc: Autogenerate an Alembic revision (usage: task revision -- "message")
+    desc: 'Autogenerate an Alembic revision (usage: task revision -- "message")'
     deps: [sync]
     cmds:
       - uv run alembic revision --autogenerate -m "{{.CLI_ARGS}}"
