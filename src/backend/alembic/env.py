@@ -12,7 +12,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from fourdrinier.core.settings import SETTINGS
 from fourdrinier.db.base import Base
-from fourdrinier.db.models import DockerHost, SSHKeypair  # noqa: F401 — register models on metadata
+from fourdrinier.db.models import (  # noqa: F401 — register models on metadata
+    DockerHost,
+    KubernetesHost,
+    SSHKeypair,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

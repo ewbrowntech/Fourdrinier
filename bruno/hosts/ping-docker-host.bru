@@ -1,17 +1,17 @@
 meta {
-  name: Ping host
+  name: Ping Docker host
   type: http
   seq: 5
 }
 
 post {
-  url: {{baseUrl}}/api/v1/hosts/{{hostId}}/ping
+  url: {{baseUrl}}/api/v1/hosts/{{dockerHostId}}/ping
   body: none
   auth: none
 }
 
 params:path {
-  hostId: {{hostId}}
+  dockerHostId: {{dockerHostId}}
 }
 
 tests {

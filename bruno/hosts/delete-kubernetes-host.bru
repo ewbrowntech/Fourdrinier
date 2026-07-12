@@ -1,0 +1,21 @@
+meta {
+  name: Delete Kubernetes host
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/hosts/{{kubernetesHostId}}
+  body: none
+  auth: none
+}
+
+params:path {
+  kubernetesHostId: {{kubernetesHostId}}
+}
+
+tests {
+  test("should delete kubernetes host", function() {
+    expect(res.status).to.equal(204);
+  });
+}

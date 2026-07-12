@@ -1,0 +1,47 @@
+meta {
+  name: Create Kubernetes host
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/hosts
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "type": "kubernetes",
+    "name": "k3s-local",
+    "api_url": "{{k8sApiUrl}}",
+    "ca_cert_pem": "{{process.env.K8S_CA_CERT}}",
+    "token": "{{process.env.K8S_TOKEN}}",
+    "namespace": "fourdrinier",
+    "enabled": true,
+    "labels": {
+      "env": "local"
+    }
+  }
+}
+
+script:post-response {
+  if (res.status === 201 && res.body && res.body.id) {
+    bru.setEnvVar("kubernetesHostId", res.body.id);
+  }
+}
+
+tests {
+  test("should create kubernetes host", function() {
+    expect(res.status).to.equal(201);
+    expect(res.body).to.have.property("id");
+    expect(res.body.type).to.equal("kubernetes");
+    expect(res.body.namespace).to.equal("fourdrinier");
+  });
+
+  test("should not expose the token or CA", function() {
+    expect(res.body).to.not.have.property("token");
+    expect(res.body).to.not.have.property("token_encrypted");
+    expect(res.body).to.not.have.property("ca_cert_pem");
+  });
+}

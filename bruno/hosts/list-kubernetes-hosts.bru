@@ -1,0 +1,32 @@
+meta {
+  name: List Kubernetes hosts
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v1/hosts
+  body: none
+  auth: none
+}
+
+params:query {
+  type: kubernetes
+}
+
+script:post-response {
+  if (res.status === 200 && Array.isArray(res.body)) {
+    const k8sHost = res.body.find((h) => h.type === "kubernetes");
+    if (k8sHost && k8sHost.id) {
+      bru.setEnvVar("kubernetesHostId", k8sHost.id);
+    }
+  }
+}
+
+tests {
+  test("should list only kubernetes hosts", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body).to.be.an("array");
+    res.body.forEach((h) => expect(h.type).to.equal("kubernetes"));
+  });
+}

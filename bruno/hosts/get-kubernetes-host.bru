@@ -1,0 +1,24 @@
+meta {
+  name: Get Kubernetes host
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/hosts/{{kubernetesHostId}}
+  body: none
+  auth: none
+}
+
+params:path {
+  kubernetesHostId: {{kubernetesHostId}}
+}
+
+tests {
+  test("should get kubernetes host by id", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body).to.have.property("id");
+    expect(res.body.id).to.equal(bru.getEnvVar("kubernetesHostId"));
+    expect(res.body.type).to.equal("kubernetes");
+  });
+}

@@ -1,4 +1,4 @@
-"""DockerHost ORM model — remote Docker daemons reached over SSH."""
+"""KubernetesHost ORM model — clusters reached over HTTPS with a bearer token."""
 
 from __future__ import annotations
 
@@ -9,9 +9,8 @@ from typing import ClassVar
 from sqlalchemy import (
     Boolean,
     DateTime,
-    ForeignKey,
     Index,
-    Integer,
+    LargeBinary,
     String,
     Text,
     Uuid,
@@ -19,26 +18,25 @@ from sqlalchemy import (
     text,
     true,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
 from fourdrinier.db.base import Base
-from fourdrinier.db.models.ssh_keypair import SSHKeypair
 
 
-class DockerHost(Base):
-    """A remote Docker daemon reachable via ``ssh://username@address:port``.
+class KubernetesHost(Base):
+    """A Kubernetes API server reachable at ``api_url``.
 
-    The ``host_key_*`` columns implement trust-on-first-use: they are NULL
-    until the first successful connection records the server's host key, after
-    which any mismatch is rejected.
+    Authentication uses a ServiceAccount bearer token (stored encrypted) and
+    the cluster CA certificate (public material, stored as plaintext PEM) for
+    TLS verification. Operations are scoped to ``namespace``.
     """
 
-    __tablename__ = "docker_hosts"
-    __table_args__ = (Index("ix_docker_hosts_enabled", "enabled"),)
+    __tablename__ = "kubernetes_hosts"
+    __table_args__ = (Index("ix_kubernetes_hosts_enabled", "enabled"),)
 
     # Discriminator used by the API's polymorphic read schemas; not a column.
-    type: ClassVar[str] = "docker"
+    type: ClassVar[str] = "kubernetes"
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -46,18 +44,14 @@ class DockerHost(Base):
         default=uuid.uuid4,
     )
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    address: Mapped[str] = mapped_column(String(255), nullable=False)
-    port: Mapped[int] = mapped_column(
-        Integer,
+    api_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    ca_cert_pem: Mapped[str] = mapped_column(Text, nullable=False)
+    token_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    namespace: Mapped[str] = mapped_column(
+        String(63),
         nullable=False,
-        default=22,
-        server_default=text("22"),
-    )
-    username: Mapped[str] = mapped_column(String(255), nullable=False)
-    keypair_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("ssh_keypairs.id"),
-        nullable=False,
+        default="fourdrinier",
+        server_default=text("'fourdrinier'"),
     )
     enabled: Mapped[bool] = mapped_column(
         Boolean,
@@ -71,9 +65,6 @@ class DockerHost(Base):
         default=dict,
         server_default=text("'{}'"),
     )
-    host_key_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    host_key_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
-    host_key_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -90,7 +81,5 @@ class DockerHost(Base):
         onupdate=func.now(),
     )
 
-    keypair: Mapped[SSHKeypair] = relationship(lazy="joined")
 
-
-__all__ = ["DockerHost"]
+__all__ = ["KubernetesHost"]

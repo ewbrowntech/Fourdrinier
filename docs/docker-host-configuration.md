@@ -9,7 +9,7 @@ Fourdrinier controls Docker daemons on remote machines. A **Docker host** is reg
 Design decisions:
 
 - **Keypairs are a separate, reusable model.** One keypair can authenticate many hosts. The server can generate keypairs (ed25519) or import existing private keys.
-- **Docker-only.** The earlier generic docker/kubernetes host model was replaced with a purpose-built `docker_hosts` table with typed columns. Kubernetes support, if it returns, will be its own model.
+- **Purpose-built tables per host type.** The earlier generic host model was replaced with a `docker_hosts` table with typed columns. Kubernetes clusters are a sibling model with their own table and auth story — see [kubernetes-host-configuration.md](kubernetes-host-configuration.md).
 - **Trust-on-first-use (TOFU) host-key verification.** The remote server's SSH host key is recorded on the first successful connection and strictly verified afterwards; a changed key fails the connection.
 
 ## Architecture
@@ -223,7 +223,6 @@ If a host is legitimately reinstalled (new host key), the recorded key must be c
 - Host-key reset endpoint (re-TOFU after a host reinstall)
 - Docker client connection pooling/reuse across requests (a ping opens and closes a fresh SSH connection)
 - Background health polling (`last_seen_at` currently only updates on explicit ping)
-- Kubernetes hosts
 
 ## Testing
 
