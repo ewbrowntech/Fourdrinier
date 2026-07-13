@@ -18,3 +18,5 @@ services:
       - ./src/backend/alembic:/app/backend/alembic
       - ./src/backend/alembic.ini:/app/backend/alembic.ini
       - ./src/backend/data:/app/backend/data
+    networks:
+      - default

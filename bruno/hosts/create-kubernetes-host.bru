@@ -10,19 +10,40 @@ post {
   auth: none
 }
 
-body:json {
-  {
-    "type": "kubernetes",
-    "name": "k3s-local",
-    "api_url": "{{k8sApiUrl}}",
-    "ca_cert_pem": "{{process.env.K8S_CA_CERT}}",
-    "token": "{{process.env.K8S_TOKEN}}",
-    "namespace": "fourdrinier",
-    "enabled": true,
-    "labels": {
-      "env": "local"
-    }
+script:pre-request {
+  const apiUrl = bru.getEnvVar("k8sApiUrl") || "";
+  const caCert = (bru.getEnvVar("k8sCaCert") || "")
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .trim();
+  const token = bru.getEnvVar("k8sToken") || "";
+
+  if (!apiUrl.startsWith("https://")) {
+    throw new Error("K8S_API_URL is missing or must start with https://");
   }
+  if (!caCert.includes("-----BEGIN CERTIFICATE-----")) {
+    throw new Error("K8S_CA_CERT is missing or invalid");
+  }
+  if (token.split(".").length !== 3) {
+    throw new Error("K8S_TOKEN is missing or is not a complete JWT");
+  }
+
+  req.setBody({
+    type: "kubernetes",
+    name: "k3s-local",
+    api_url: apiUrl,
+    ca_cert_pem: caCert,
+    token,
+    namespace: "fourdrinier",
+    enabled: true,
+    labels: {
+      env: "local"
+    }
+  });
+}
+
+body:json {
+  {}
 }
 
 script:post-response {

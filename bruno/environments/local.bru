@@ -2,7 +2,9 @@ vars {
   baseUrl: http://127.0.0.1:8000
   dockerHostId:
   kubernetesHostId:
-  k8sApiUrl: https://127.0.0.1:6443
+  k8sApiUrl: {{process.env.K8S_API_URL}}
+  k8sCaCert: {{process.env.K8S_CA_CERT}}
+  k8sToken: {{process.env.K8S_TOKEN}}
   keypairId:
   username: {{process.env.USERNAME}}
 }
