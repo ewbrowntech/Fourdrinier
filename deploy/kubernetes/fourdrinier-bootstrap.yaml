@@ -6,7 +6,7 @@
 #   kubectl apply -f deploy/kubernetes/fourdrinier-bootstrap.yaml
 #
 # Then extract the credentials to register the host (see
-# docs/kubernetes-host-configuration.md):
+# docs/host-architecture.md):
 #
 #   kubectl -n fourdrinier get secret fourdrinier-token -o jsonpath='{.data.token}' | base64 -d
 #   kubectl -n fourdrinier get secret fourdrinier-token -o jsonpath='{.data.ca\.crt}' | base64 -d
