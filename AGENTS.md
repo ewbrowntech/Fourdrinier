@@ -12,6 +12,19 @@
 
 ## Code Style
 
+## Agent Rules
+
+Detailed coding standards live in `docs/standards/`. Claude and Cursor load
+path-scoped rules through symlinks in `.claude/rules/` and `.cursor/rules/`;
+Codex and OpenCode follow the mandatory pointers in this file. Keep this file
+concise and put detailed, task-specific guidance in the standards documents.
+
+## Backend Coding Standards
+
+Before modifying `src/backend/`, read and follow
+[`docs/standards/backend.md`](docs/standards/backend.md). This is mandatory
+for backend application code, tests, and Alembic migrations.
+
 ## Testing
 
 ## Configuration
