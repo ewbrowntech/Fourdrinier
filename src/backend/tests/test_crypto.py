@@ -45,9 +45,7 @@ def test_fernet_cipher_implements_secret_interface() -> None:
 
 
 def test_missing_key_raises() -> None:
-    with pytest.raises(
-        SecretConfigurationError, match="ENCRYPTION_KEY is not set"
-    ):
+    with pytest.raises(SecretConfigurationError, match="ENCRYPTION_KEY is not set"):
         encrypt_secret(b"x", _settings(None))
 
 

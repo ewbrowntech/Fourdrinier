@@ -86,9 +86,9 @@ async def test_create_host_rejects_url_breaking_username(client: httpx.AsyncClie
 async def test_list_get_delete_host(client: httpx.AsyncClient) -> None:
     host = await _create_host(client)
     assert [h["id"] for h in (await client.get("/api/v1/hosts")).json()] == [host["id"]]
-    assert [h["id"] for h in (await client.get("/api/v1/hosts", params={"type": "docker"})).json()] == [
-        host["id"]
-    ]
+    assert [
+        h["id"] for h in (await client.get("/api/v1/hosts", params={"type": "docker"})).json()
+    ] == [host["id"]]
     assert (await client.get("/api/v1/hosts", params={"type": "other"})).status_code == 422
     assert (await client.get(f"/api/v1/hosts/{host['id']}")).status_code == 200
     assert (await client.delete(f"/api/v1/hosts/{host['id']}")).status_code == 204

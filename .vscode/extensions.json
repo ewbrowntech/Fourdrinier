@@ -1,7 +1,8 @@
 {
   "recommendations": [
+    "charliermarsh.ruff",
     "task.vscode-task",
     "FastAPILabs.fastapi-vscode",
-    "DavidAnson.vscode-markdownlint"
+    "DavidAnson.vscode-markdownlint",
   ]
 }

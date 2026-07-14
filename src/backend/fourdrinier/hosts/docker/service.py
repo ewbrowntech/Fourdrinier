@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import socket
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import perf_counter
 
 import docker.errors
@@ -73,7 +72,7 @@ def _ping_blocking(
             ) from exc
         except paramiko.AuthenticationException as exc:
             raise SSHAuthError(f"SSH authentication failed for {username}@{address}") from exc
-        except (paramiko.SSHException, socket.error, OSError, TimeoutError) as exc:
+        except (paramiko.SSHException, OSError, TimeoutError) as exc:
             raise HostUnreachableError(f"could not reach {address}:{port}: {exc}") from exc
 
         captured: paramiko.PKey | None = adapter.captured_host_key
@@ -137,9 +136,7 @@ async def ping_host(
         HostKeyMismatchError: presented host key differs from the recorded one.
         DecryptionError / EncryptionKeyError: stored key cannot be decrypted.
     """
-    private_key_pem: str = decrypt_secret(
-        host.keypair.private_key_encrypted, settings
-    ).decode()
+    private_key_pem: str = decrypt_secret(host.keypair.private_key_encrypted, settings).decode()
     known_host_key: KnownHostKey | None = None
     if host.host_key_type and host.host_key_b64:
         known_host_key = KnownHostKey(key_type=host.host_key_type, key_b64=host.host_key_b64)
@@ -157,7 +154,7 @@ async def ping_host(
     host.host_key_type = result.host_key.key_type
     host.host_key_b64 = result.host_key.key_b64
     host.host_key_fingerprint = result.host_key.fingerprint
-    host.last_seen_at = datetime.now(timezone.utc)
+    host.last_seen_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(host)
     return result

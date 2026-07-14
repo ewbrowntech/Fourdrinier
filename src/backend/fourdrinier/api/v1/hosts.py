@@ -68,9 +68,7 @@ def _name_conflict(name: str) -> HTTPException:
 
 
 @router.post("", response_model=HostRead, status_code=status.HTTP_201_CREATED)
-async def create_host(
-    body: HostCreate, session: DbSession, settings: SettingsDep
-) -> AnyHost:
+async def create_host(body: HostCreate, session: DbSession, settings: SettingsDep) -> AnyHost:
     if isinstance(body, KubernetesHostCreate):
         # Names must be unique across host types so the merged list is unambiguous.
         if await hosts_crud.get_host_by_name(session, body.name) is not None:
@@ -127,9 +125,7 @@ async def list_hosts(
         await hosts_crud.list_hosts(session) if type in (None, "docker") else []
     )
     k8s_hosts: list[KubernetesHost] = (
-        await k8s_hosts_crud.list_hosts(session)
-        if type in (None, "kubernetes")
-        else []
+        await k8s_hosts_crud.list_hosts(session) if type in (None, "kubernetes") else []
     )
     return sorted([*docker_hosts, *k8s_hosts], key=lambda host: host.name)
 
@@ -152,9 +148,7 @@ async def _ping_docker_host(
     session: DbSession, host: DockerHost, settings: SettingsDep
 ) -> DockerPingResponse:
     try:
-        result: docker_service.PingResult = await docker_service.ping_host(
-            session, host, settings
-        )
+        result: docker_service.PingResult = await docker_service.ping_host(session, host, settings)
     except HostKeyMismatchError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -193,9 +187,7 @@ async def _ping_kubernetes_host(
     session: DbSession, host: KubernetesHost, settings: SettingsDep
 ) -> KubernetesPingResponse:
     try:
-        result: k8s_service.PingResult = await k8s_service.ping_host(
-            session, host, settings
-        )
+        result: k8s_service.PingResult = await k8s_service.ping_host(session, host, settings)
     except TLSVerificationError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

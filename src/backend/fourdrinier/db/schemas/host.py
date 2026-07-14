@@ -63,9 +63,7 @@ class KubernetesHostCreate(BaseModel):
     api_url: HttpsUrl
     ca_cert_pem: str
     token: str = Field(min_length=1)
-    namespace: str = Field(
-        default="fourdrinier", max_length=63, pattern=_NAMESPACE_PATTERN
-    )
+    namespace: str = Field(default="fourdrinier", max_length=63, pattern=_NAMESPACE_PATTERN)
     enabled: bool = True
     labels: dict[str, str] = Field(default_factory=dict)
 
@@ -75,9 +73,7 @@ class KubernetesHostCreate(BaseModel):
         try:
             certs = x509.load_pem_x509_certificates(v.encode())
         except ValueError as exc:
-            raise ValueError(
-                "ca_cert_pem is not a valid PEM certificate bundle"
-            ) from exc
+            raise ValueError("ca_cert_pem is not a valid PEM certificate bundle") from exc
         if not certs:
             raise ValueError("ca_cert_pem contains no certificates")
         return v
@@ -95,8 +91,7 @@ def _host_create_tag(v: object) -> str | None:
 
 
 HostCreate = Annotated[
-    Annotated[DockerHostCreate, Tag("docker")]
-    | Annotated[KubernetesHostCreate, Tag("kubernetes")],
+    Annotated[DockerHostCreate, Tag("docker")] | Annotated[KubernetesHostCreate, Tag("kubernetes")],
     Discriminator(_host_create_tag),
 ]
 
@@ -141,9 +136,7 @@ class KubernetesHostRead(BaseModel):
     updated_at: datetime
 
 
-HostRead = Annotated[
-    DockerHostRead | KubernetesHostRead, Field(discriminator="type")
-]
+HostRead = Annotated[DockerHostRead | KubernetesHostRead, Field(discriminator="type")]
 
 
 class PingHostKey(BaseModel):
@@ -184,9 +177,7 @@ class KubernetesPingResponse(BaseModel):
     can_create_deployments: Literal[True] = True
 
 
-PingResponse = Annotated[
-    DockerPingResponse | KubernetesPingResponse, Field(discriminator="type")
-]
+PingResponse = Annotated[DockerPingResponse | KubernetesPingResponse, Field(discriminator="type")]
 
 
 __all__ = [

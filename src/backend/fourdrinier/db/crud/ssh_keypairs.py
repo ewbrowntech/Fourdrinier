@@ -59,14 +59,10 @@ async def get_keypair(session: AsyncSession, keypair_id: uuid.UUID) -> SSHKeypai
 
 async def delete_keypair(session: AsyncSession, keypair: SSHKeypair) -> None:
     """Delete a keypair. Raises ``KeypairInUseError`` if any host references it."""
-    stmt = select(func.count()).select_from(DockerHost).where(
-        DockerHost.keypair_id == keypair.id
-    )
+    stmt = select(func.count()).select_from(DockerHost).where(DockerHost.keypair_id == keypair.id)
     referencing_hosts: int = (await session.execute(stmt)).scalar_one()
     if referencing_hosts:
-        raise KeypairInUseError(
-            f"keypair {keypair.name!r} is used by {referencing_hosts} host(s)"
-        )
+        raise KeypairInUseError(f"keypair {keypair.name!r} is used by {referencing_hosts} host(s)")
     await session.delete(keypair)
     await session.commit()
 

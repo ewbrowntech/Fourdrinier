@@ -118,9 +118,7 @@ class SSHDockerAdapter(SSHHTTPAdapter):
                 self._known_host_key.key_type,
                 self._known_host_key.to_pkey(entry_name),
             )
-        self.ssh_client.set_missing_host_key_policy(
-            _CaptureHostKeyPolicy(self._captured_keys)
-        )
+        self.ssh_client.set_missing_host_key_policy(_CaptureHostKeyPolicy(self._captured_keys))
 
 
 def build_docker_client(
@@ -139,9 +137,7 @@ def build_docker_client(
     """
     base_url: str = f"ssh://{urllib.parse.quote(username)}@{address}:{port}"
     # The adapter connects eagerly — do the risky part first.
-    adapter = SSHDockerAdapter(
-        base_url, pkey=pkey, known_host_key=known_host_key, timeout=timeout
-    )
+    adapter = SSHDockerAdapter(base_url, pkey=pkey, known_host_key=known_host_key, timeout=timeout)
     # use_ssh_client=True makes APIClient build its lazy shell-out adapter (no
     # connection at init); we immediately replace it with ours. A fixed API
     # version prevents eager version auto-negotiation before the swap.

@@ -81,4 +81,4 @@ class Settings(BaseSettings):
 SETTINGS = Settings()
 
 
-__all__ = ["AppEnv", "LogLevel", "SETTINGS", "Settings"]
+__all__ = ["SETTINGS", "AppEnv", "LogLevel", "Settings"]

@@ -3,13 +3,12 @@ mocked at the ``_ping_cluster`` boundary so persistence still executes."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 import pytest
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import NameOID
@@ -38,7 +37,7 @@ def _make_ca_pem() -> str:
     """Generate a minimal self-signed CA certificate PEM."""
     key = ed25519.Ed25519PrivateKey.generate()
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "test-ca")])
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)
@@ -55,9 +54,7 @@ def _make_ca_pem() -> str:
 CA_PEM = _make_ca_pem()
 
 
-async def _create_k8s_host(
-    client: httpx.AsyncClient, **overrides: Any
-) -> dict[str, Any]:
+async def _create_k8s_host(client: httpx.AsyncClient, **overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "type": "kubernetes",
         "name": "k3s",
@@ -71,9 +68,7 @@ async def _create_k8s_host(
     return resp.json()
 
 
-async def _create_docker_host(
-    client: httpx.AsyncClient, **overrides: Any
-) -> dict[str, Any]:
+async def _create_docker_host(client: httpx.AsyncClient, **overrides: Any) -> dict[str, Any]:
     keypair = (await client.post("/api/v1/keypairs", json={"name": "kp"})).json()
     payload: dict[str, Any] = {
         "name": "remote",
@@ -273,7 +268,5 @@ async def test_ping_error_mapping(
 
 
 async def test_ping_missing_host_404(client: httpx.AsyncClient) -> None:
-    resp = await client.post(
-        "/api/v1/hosts/00000000-0000-0000-0000-000000000000/ping"
-    )
+    resp = await client.post("/api/v1/hosts/00000000-0000-0000-0000-000000000000/ping")
     assert resp.status_code == 404

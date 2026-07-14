@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import ssl
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -44,9 +45,7 @@ def _happy_handler(
     return handler
 
 
-async def _ping(
-    handler: Callable[[httpx.Request], httpx.Response], namespace: str = "fourdrinier"
-):
+async def _ping(handler: Callable[[httpx.Request], httpx.Response], namespace: str = "fourdrinier"):
     return await _ping_cluster(
         api_url=API_URL,
         token="token",

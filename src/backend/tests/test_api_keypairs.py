@@ -32,9 +32,7 @@ async def test_upload_keypair(client: httpx.AsyncClient) -> None:
 
 
 async def test_upload_invalid_key_is_422(client: httpx.AsyncClient) -> None:
-    resp = await client.post(
-        "/api/v1/keypairs", json={"name": "bad", "private_key": "garbage"}
-    )
+    resp = await client.post("/api/v1/keypairs", json={"name": "bad", "private_key": "garbage"})
     assert resp.status_code == 422
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ssl
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any, NoReturn
 
@@ -50,9 +50,7 @@ def _raise_for_transport(exc: httpx.HTTPError, api_url: str) -> NoReturn:
                 "is not signed by the stored CA"
             ) from exc
         if isinstance(cause, ssl.SSLError):
-            raise TLSVerificationError(
-                f"TLS handshake with {api_url!r} failed: {cause}"
-            ) from exc
+            raise TLSVerificationError(f"TLS handshake with {api_url!r} failed: {cause}") from exc
         cause = cause.__cause__ or cause.__context__
     raise ClusterUnreachableError(f"could not reach {api_url!r}: {exc}") from exc
 
@@ -62,9 +60,7 @@ def _check_response(resp: httpx.Response, api_url: str) -> None:
     if resp.is_success:
         return
     if resp.status_code == 401:
-        raise KubernetesAuthError(
-            f"cluster {api_url!r} rejected the bearer token (401)"
-        )
+        raise KubernetesAuthError(f"cluster {api_url!r} rejected the bearer token (401)")
     if resp.status_code == 403:
         # SelfSubjectReview/SelfSubjectAccessReview creation is granted to all
         # authenticated users via system:basic-user; a 403 means broken RBAC.
@@ -73,8 +69,7 @@ def _check_response(resp: httpx.Response, api_url: str) -> None:
             "the service account's RBAC bindings are missing or broken"
         )
     raise ClusterUnreachableError(
-        f"unexpected response {resp.status_code} from "
-        f"{resp.request.url.path} on {api_url!r}"
+        f"unexpected response {resp.status_code} from {resp.request.url.path} on {api_url!r}"
     )
 
 
@@ -83,13 +78,11 @@ def _parse_json(resp: httpx.Response, api_url: str) -> dict[str, Any]:
         body = resp.json()
     except ValueError as exc:
         raise ClusterUnreachableError(
-            f"cluster {api_url!r} returned a non-JSON payload from "
-            f"{resp.request.url.path}"
+            f"cluster {api_url!r} returned a non-JSON payload from {resp.request.url.path}"
         ) from exc
     if not isinstance(body, dict):
         raise ClusterUnreachableError(
-            f"cluster {api_url!r} returned an unexpected payload from "
-            f"{resp.request.url.path}"
+            f"cluster {api_url!r} returned an unexpected payload from {resp.request.url.path}"
         )
     return body
 
@@ -159,8 +152,7 @@ async def _ping_cluster(
     if ssar_status.get("allowed") is not True:
         reason: str = str(ssar_status.get("reason", "")).strip()
         message: str = (
-            f"service account {username!r} may not create deployments in "
-            f"namespace {namespace!r}"
+            f"service account {username!r} may not create deployments in namespace {namespace!r}"
         )
         if reason:
             message = f"{message}: {reason}"
@@ -195,7 +187,7 @@ async def ping_host(
         namespace=host.namespace,
     )
 
-    host.last_seen_at = datetime.now(timezone.utc)
+    host.last_seen_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(host)
     return result

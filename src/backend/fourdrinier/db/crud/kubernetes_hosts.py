@@ -45,25 +45,19 @@ async def create_host(
 
 async def list_hosts(session: AsyncSession) -> list[KubernetesHost]:
     """Return all hosts ordered by name."""
-    stmt: Select[tuple[KubernetesHost]] = select(KubernetesHost).order_by(
-        KubernetesHost.name
-    )
+    stmt: Select[tuple[KubernetesHost]] = select(KubernetesHost).order_by(KubernetesHost.name)
     result: ScalarResult[KubernetesHost] = await session.scalars(stmt)
     return list(result.all())
 
 
-async def get_host(
-    session: AsyncSession, host_id: uuid.UUID
-) -> KubernetesHost | None:
+async def get_host(session: AsyncSession, host_id: uuid.UUID) -> KubernetesHost | None:
     """Return a host by id, or ``None`` if missing."""
     return await session.get(KubernetesHost, host_id)
 
 
 async def get_host_by_name(session: AsyncSession, name: str) -> KubernetesHost | None:
     """Return a host by name, or ``None`` if missing."""
-    stmt: Select[tuple[KubernetesHost]] = select(KubernetesHost).where(
-        KubernetesHost.name == name
-    )
+    stmt: Select[tuple[KubernetesHost]] = select(KubernetesHost).where(KubernetesHost.name == name)
     return await session.scalar(stmt)
 
 

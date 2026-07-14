@@ -20,9 +20,7 @@ def build_ssl_context(ca_cert_pem: str) -> ssl.SSLContext:
     try:
         return ssl.create_default_context(cadata=ca_cert_pem)
     except ssl.SSLError as exc:
-        raise TLSVerificationError(
-            "stored CA certificate could not be loaded"
-        ) from exc
+        raise TLSVerificationError("stored CA certificate could not be loaded") from exc
 
 
 def build_client(

@@ -63,7 +63,9 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
     return async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
-async def get_session(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:
+async def get_session(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncSession]:
     """Yield a request-scoped async session (for FastAPI ``Depends``)."""
     async with session_factory() as session:
         yield session

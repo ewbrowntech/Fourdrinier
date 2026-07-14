@@ -84,9 +84,12 @@ async def test_parent_delete_cascades_to_details(
         await session.execute(delete(Host).where(Host.id == host_id))
         await session.commit()
 
-        assert await session.scalar(
-            select(DockerHostDetails).where(DockerHostDetails.host_id == host_id)
-        ) is None
+        assert (
+            await session.scalar(
+                select(DockerHostDetails).where(DockerHostDetails.host_id == host_id)
+            )
+            is None
+        )
 
 
 async def test_host_name_is_unique_across_provider_types(app) -> None:

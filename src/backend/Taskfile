@@ -6,6 +6,37 @@ tasks:
     cmds:
       - uv sync
 
+  lint:
+    desc: Lint the backend source code
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff check
+
+  lint:fix:
+    desc: Fix linting errors automatically
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff check --fix
+
+  format:
+    desc: Format the backend source code
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff format
+
+  format:check:
+    desc: Check backend source formatting
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff format --check
+
+  check:
+    desc: Run backend static checks
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff check
+      - uv run ruff format --check
+
   dev:
     desc: Run the API with uvicorn and auto-reload (ENV=debug)
     deps: [sync, migrate]

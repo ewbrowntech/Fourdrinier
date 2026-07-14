@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import NewType, Protocol, runtime_checkable
 
-
 PlaintextSecret = NewType("PlaintextSecret", bytes)
 EncryptedSecret = NewType("EncryptedSecret", bytes)
 
