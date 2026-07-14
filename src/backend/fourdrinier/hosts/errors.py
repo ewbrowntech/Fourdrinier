@@ -25,6 +25,14 @@ class HostProviderMismatchError(HostError):
     """Host details or a driver do not match the host provider type."""
 
 
+class HostDriverNotRegisteredError(HostError):
+    """No host driver is registered for the requested provider type."""
+
+
+class HostDriverUnavailableError(HostError):
+    """The selected host driver cannot currently perform the operation."""
+
+
 class HostRemoteError(HostError):
     """Base class for stable failures reported by a remote host driver."""
 
@@ -51,6 +59,8 @@ class HostInvalidRemoteStateError(HostRemoteError):
 
 __all__ = [
     "HostAuthenticationError",
+    "HostDriverNotRegisteredError",
+    "HostDriverUnavailableError",
     "HostError",
     "HostInvalidRemoteStateError",
     "HostNameConflictError",

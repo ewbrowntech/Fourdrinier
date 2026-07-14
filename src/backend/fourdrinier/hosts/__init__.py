@@ -1,7 +1,14 @@
-"""Host domain vocabulary and provider integrations."""
+"""
+__init__.py
 
+Expose the provider-neutral host domain and driver boundary.
+"""
+
+from fourdrinier.hosts.drivers import HostDriver, HostDriverRegistry
 from fourdrinier.hosts.errors import (
     HostAuthenticationError,
+    HostDriverNotRegisteredError,
+    HostDriverUnavailableError,
     HostError,
     HostInvalidRemoteStateError,
     HostNameConflictError,
@@ -22,6 +29,10 @@ from fourdrinier.hosts.types import (
 
 __all__ = [
     "HostAuthenticationError",
+    "HostDriver",
+    "HostDriverNotRegisteredError",
+    "HostDriverRegistry",
+    "HostDriverUnavailableError",
     "HostError",
     "HostId",
     "HostInvalidRemoteStateError",
