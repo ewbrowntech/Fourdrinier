@@ -22,11 +22,12 @@ from fourdrinier.db.models import DockerHost, KubernetesHost
 from fourdrinier.db.schemas import (
     DockerPingResponse,
     HostCreate,
+    HostListResponse,
+    HostPingResponse,
     HostRead,
     KubernetesHostCreate,
     KubernetesPingResponse,
     PingHostKey,
-    PingResponse,
 )
 from fourdrinier.hosts.docker import service as docker_service
 from fourdrinier.hosts.docker.errors import (
@@ -116,7 +117,7 @@ async def create_host(body: HostCreate, session: DbSession, settings: SettingsDe
         raise _name_conflict(body.name) from exc
 
 
-@router.get("", response_model=list[HostRead])
+@router.get("", response_model=HostListResponse)
 async def list_hosts(
     session: DbSession,
     type: Literal["docker", "kubernetes"] | None = None,
@@ -222,7 +223,7 @@ async def _ping_kubernetes_host(
     )
 
 
-@router.post("/{host_id}/ping", response_model=PingResponse)
+@router.post("/{host_id}/ping", response_model=HostPingResponse)
 async def ping_host(
     host_id: uuid.UUID, session: DbSession, settings: SettingsDep
 ) -> DockerPingResponse | KubernetesPingResponse:

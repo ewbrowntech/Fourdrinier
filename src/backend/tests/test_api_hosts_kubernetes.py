@@ -71,6 +71,7 @@ async def _create_k8s_host(client: httpx.AsyncClient, **overrides: Any) -> dict[
 async def _create_docker_host(client: httpx.AsyncClient, **overrides: Any) -> dict[str, Any]:
     keypair = (await client.post("/api/v1/keypairs", json={"name": "kp"})).json()
     payload: dict[str, Any] = {
+        "type": "docker",
         "name": "remote",
         "address": "203.0.113.10",
         "username": "docker",
@@ -160,6 +161,7 @@ async def test_name_conflict_across_types(client: httpx.AsyncClient) -> None:
     resp = await client.post(
         "/api/v1/hosts",
         json={
+            "type": "docker",
             "name": "shared",
             "address": "203.0.113.10",
             "username": "docker",

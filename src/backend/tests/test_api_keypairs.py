@@ -62,6 +62,7 @@ async def test_delete_in_use_is_409(client: httpx.AsyncClient) -> None:
     host = await client.post(
         "/api/v1/hosts",
         json={
+            "type": "docker",
             "name": "h1",
             "address": "203.0.113.10",
             "username": "docker",

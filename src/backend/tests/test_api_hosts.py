@@ -36,6 +36,7 @@ FAKE_PING = PingResult(
 async def _create_host(client: httpx.AsyncClient, **overrides: Any) -> dict[str, Any]:
     keypair = (await client.post("/api/v1/keypairs", json={"name": "kp"})).json()
     payload: dict[str, Any] = {
+        "type": "docker",
         "name": "remote",
         "address": "203.0.113.10",
         "port": 22,
@@ -60,6 +61,7 @@ async def test_create_host_unknown_keypair_is_404(client: httpx.AsyncClient) -> 
     resp = await client.post(
         "/api/v1/hosts",
         json={
+            "type": "docker",
             "name": "h",
             "address": "203.0.113.10",
             "username": "docker",
@@ -74,6 +76,7 @@ async def test_create_host_rejects_url_breaking_username(client: httpx.AsyncClie
     resp = await client.post(
         "/api/v1/hosts",
         json={
+            "type": "docker",
             "name": "h",
             "address": "203.0.113.10",
             "username": "evil@user",
