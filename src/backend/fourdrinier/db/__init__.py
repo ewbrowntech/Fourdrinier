@@ -2,14 +2,24 @@
 
 from fourdrinier.db.base import Base
 from fourdrinier.db.deps import DbSession
-from fourdrinier.db.models import DockerHost, KeypairSource, SSHKeypair
+from fourdrinier.db.models import (
+    DockerHost,
+    DockerHostDetails,
+    Host,
+    KeypairSource,
+    KubernetesHostDetails,
+    SSHKeypair,
+)
 from fourdrinier.db.session import create_engine, create_session_factory, get_session
 
 __all__ = [
     "Base",
     "DbSession",
     "DockerHost",
+    "DockerHostDetails",
+    "Host",
     "KeypairSource",
+    "KubernetesHostDetails",
     "SSHKeypair",
     "create_engine",
     "create_session_factory",

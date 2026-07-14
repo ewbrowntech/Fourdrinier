@@ -8,7 +8,7 @@ from cryptography.fernet import Fernet
 from fourdrinier.core.crypto import (
     DecryptionError,
     EncryptionKeyError,
-    Fernet,
+    FernetSecretCipher,
     decrypt_secret,
     encrypt_secret,
 )

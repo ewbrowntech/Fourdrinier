@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -13,6 +15,17 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from fourdrinier.core.settings import Settings
+
+
+def _enable_sqlite_foreign_keys(
+    dbapi_connection: Any,
+    _connection_record: Any,
+) -> None:
+    """Enable SQLite's opt-in foreign-key and cascade enforcement."""
+
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.close()
 
 
 def ensure_sqlite_parent(database_url: str) -> None:
@@ -36,10 +49,13 @@ def ensure_sqlite_parent(database_url: str) -> None:
 def create_engine(settings: Settings) -> AsyncEngine:
     """Build an async SQLAlchemy engine from settings."""
     ensure_sqlite_parent(settings.database_url)
-    return create_async_engine(
+    engine = create_async_engine(
         settings.database_url,
         echo=settings.env == "debug",
     )
+    if settings.database_url.startswith("sqlite"):
+        event.listen(engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
+    return engine
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
