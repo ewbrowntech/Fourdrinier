@@ -16,14 +16,14 @@ paths:
 ## Table of Contents
 
 - [Scope](#scope)
-- [General](#general)
+- [Python Conventions](#python-conventions)
   - [Type Annotations](#type-annotations)
   - [Module Docstrings](#module-docstrings)
   - [Class Docstrings](#class-docstrings)
   - [Function and Method Docstrings](#function-and-method-docstrings)
+  - [Helper Functions and Methods](#helper-functions-and-methods)
 - [Application Boundaries](#application-boundaries)
 - [Persistence and Migrations](#persistence-and-migrations)
-- [External Systems and Security](#external-systems-and-security)
 - [Evolving This Standard](#evolving-this-standard)
 
 ## Scope
@@ -34,19 +34,18 @@ deliberately limited to conventions that are not reliably enforced by tooling;
 formatting and static-analysis requirements belong in project configuration
 and CI.
 
-## General
+## Python Conventions
 
 ### Type Annotations
 
-All functions and methods, including private and nested ones, must annotate
-every parameter and their return type. Use `-> None` when a callable does not
-return a value.
+Every function and method, including private and nested callables, must have
+type annotations for all parameters and its return value. Use `-> None` when a
+callable does not return a value.
 
-All variables must have explicit type annotations, including module-level
-variables, class attributes, and local variables, even when the type is obvious
-from the assigned value. Prefer precise, concrete types over `Any`; reserve
-`Any` for genuinely untyped external data at a boundary, then validate or
-narrow it promptly.
+Every module-level variable, class attribute, and local variable must have an
+explicit type annotation, even when its type is obvious from the assigned
+value. Prefer precise, concrete types over `Any`. Reserve `Any` for genuinely
+untyped external data at a boundary, then validate or narrow it promptly.
 
 ```python
 DEFAULT_PORT: int = 22
@@ -70,10 +69,9 @@ Brief description of what the module does.
 """
 ```
 
-The docstring must be the module's first statement, except when a shebang or
-source-encoding declaration is required. Keep
-`from __future__ import annotations` immediately after the module docstring in
-new modules that define typed application code.
+The docstring must be the module's first statement unless a shebang or
+source-encoding declaration is required. In new typed application modules, place
+`from __future__ import annotations` immediately after the docstring.
 
 ### Class Docstrings
 
@@ -83,15 +81,15 @@ responsibilities.
 ### Function and Method Docstrings
 
 Every public function and method must have a docstring that follows PEP 257
-and uses Google-style sections. Begin with a concise, imperative summary line,
-add a blank line before further detail, and document the public contract rather
-than restating the implementation.
+conventions and uses Google-style sections. Begin with a concise, imperative
+summary line. Add a blank line before further detail, and document the public
+contract rather than restating the implementation.
 
 Use the following sections when applicable:
 
 - `Args:` describes each parameter except `self` and `cls`.
-- `Returns:` describes the returned value. Omit it when the function returns
-  only `None`.
+- `Returns:` describes the meaning of the returned value. Omit it when the
+  function returns only `None`.
 - `Raises:` lists exceptions that callers are expected to handle. Do not list
   every exception that could arise from an implementation detail.
 
@@ -110,7 +108,19 @@ def create_host(name: str, address: str) -> Host:
         HostAlreadyExistsError: If a host with the same name already exists.
         InvalidAddressError: If the address cannot be parsed.
     """
+    ...
 ```
+
+### Helper Functions and Methods
+
+Helper functions and methods can reduce duplication, but brevity is not the
+goal. Introduce them when they reduce the cognitive load of maintaining and
+reviewing the code by making its intent or responsibilities easier to
+understand.
+
+Inline a helper when it is rarely reused or when understanding the abstraction
+requires more effort than understanding the code it replaces. Prefer clear,
+local code over indirection that merely saves lines.
 
 ## Application Boundaries
 
