@@ -1,7 +1,7 @@
 # Host Implementation Order
 
 Implement the host architecture dependency-first, followed by thin vertical
-slices. AI can generate the structural code early, while repositories,
+slices. AI can generate the structural code early, while CRUD persistence,
 services, provider behavior, and consistency decisions remain manually owned
 and AI-assisted.
 
@@ -49,7 +49,7 @@ Add schema tests immediately. Cover wrong-provider fields, a missing or unknown
 `type`, missing required provider fields, forbidden extra fields, and omission
 of secrets from responses.
 
-## 5. Implement `HostRepository`
+## 5. Implement host CRUD operations
 
 Start with persistence-only operations:
 
@@ -60,7 +60,8 @@ Start with persistence-only operations:
 - delete
 - eagerly load the matching details record
 
-This is the first substantial logic layer to implement manually.
+Keep the operations in separate modules behind the `db.crud.hosts` package
+boundary. This is the first substantial logic layer to implement manually.
 
 ## 6. Define the driver boundary
 
@@ -85,7 +86,7 @@ Implement the use cases in this order:
 5. ping
 
 Creation enforces the matching provider details type and transaction boundary.
-Ping is the first point where repository and driver orchestration meet.
+Ping is the first point where CRUD persistence and driver orchestration meet.
 
 ## 8. Implement one provider's ping end to end
 
@@ -93,7 +94,7 @@ Begin with whichever provider has the strongest existing client code, likely
 Docker, and wire the complete path:
 
 ```text
-endpoint -> service -> repository/registry -> driver -> remote API
+endpoint -> service -> CRUD/registry -> driver -> remote API
 ```
 
 This validates the architecture before it is duplicated for another provider.
@@ -161,7 +162,7 @@ AI can generate:
 
 Manually own, with AI assistance:
 
-- repository behavior
+- CRUD persistence behavior
 - application services
 - driver behavior
 - transaction boundaries

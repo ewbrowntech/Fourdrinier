@@ -55,12 +55,6 @@ async def get_host(session: AsyncSession, host_id: uuid.UUID) -> KubernetesHost 
     return await session.get(KubernetesHost, host_id)
 
 
-async def get_host_by_name(session: AsyncSession, name: str) -> KubernetesHost | None:
-    """Return a host by name, or ``None`` if missing."""
-    stmt: Select[tuple[KubernetesHost]] = select(KubernetesHost).where(KubernetesHost.name == name)
-    return await session.scalar(stmt)
-
-
 async def delete_host(session: AsyncSession, host: KubernetesHost) -> None:
     """Delete a host."""
     await session.delete(host)
@@ -71,6 +65,5 @@ __all__ = [
     "create_host",
     "delete_host",
     "get_host",
-    "get_host_by_name",
     "list_hosts",
 ]

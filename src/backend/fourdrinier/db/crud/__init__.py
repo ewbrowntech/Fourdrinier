@@ -1,5 +1,9 @@
-"""Database CRUD helpers."""
+"""
+__init__.py
 
-from fourdrinier.db.crud import hosts, kubernetes_hosts, ssh_keypairs
+Expose database CRUD modules.
+"""
 
-__all__ = ["hosts", "kubernetes_hosts", "ssh_keypairs"]
+from fourdrinier.db.crud import docker_hosts, hosts, kubernetes_hosts, ssh_keypairs
+
+__all__: list[str] = ["docker_hosts", "hosts", "kubernetes_hosts", "ssh_keypairs"]

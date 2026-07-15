@@ -16,7 +16,7 @@ architecture for host persistence, APIs, and provider operations.
 - [HTTP API](#http-api)
   - [Create body](#create-body)
 - [Component boundaries](#component-boundaries)
-  - [Repositories](#repositories)
+  - [CRUD persistence](#crud-persistence)
   - [Application services](#application-services)
 - [Host drivers](#host-drivers)
   - [Driver registry](#driver-registry)
@@ -29,6 +29,7 @@ architecture for host persistence, APIs, and provider operations.
   - [One wide hosts table](#one-wide-hosts-table)
   - [JSON provider configuration](#json-provider-configuration)
   - [ORM inheritance as the primary abstraction](#orm-inheritance-as-the-primary-abstraction)
+  - [Repository pattern](#repository-pattern)
   - [Passing drivers into CRUD functions](#passing-drivers-into-crud-functions)
 - [Open design questions](#open-design-questions)
 
@@ -84,8 +85,8 @@ common operations must query and dispatch across both tables.
 5. A `HostDriver` contract defines remote host operations, with
    `DockerHostDriver` and `KubernetesHostDriver` implementations.
 6. A driver registry selects an implementation by `host.type`.
-7. Application services coordinate repositories and drivers. Repositories are
-   responsible only for database persistence.
+7. Application services coordinate CRUD persistence functions and drivers.
+   CRUD modules are responsible only for database persistence.
 
 ## Domain and persistence model
 
@@ -233,8 +234,8 @@ provisioning behavior.
 flowchart LR
     API[Host and server endpoints]
     SVC[Application services]
-    HR[HostRepository]
-    SR[ServerRepository]
+    HC[Host CRUD]
+    SC[Server CRUD]
     REG[HostDriverRegistry]
     DD[DockerHostDriver]
     KD[KubernetesHostDriver]
@@ -243,28 +244,30 @@ flowchart LR
     K8S[Remote Kubernetes API]
 
     API --> SVC
-    SVC --> HR --> DB
-    SVC --> SR --> DB
+    SVC --> HC --> DB
+    SVC --> SC --> DB
     SVC --> REG
     REG --> DD --> DOCKER
     REG --> KD --> K8S
 ```
 
-### Repositories
+### CRUD persistence
 
-Repositories perform local persistence only. `HostRepository` owns operations
-such as loading a host with its details, listing and filtering hosts, and
-deleting a host. It does not communicate with Docker or Kubernetes and does
-not receive a driver as an argument.
+CRUD modules perform local persistence only. The host CRUD package owns
+operations such as loading a host with its details, listing and filtering
+hosts, and deleting a host. It does not communicate with Docker or Kubernetes
+and does not receive a driver as an argument.
 
-Repository methods should generally add, query, delete, or flush ORM objects.
-The calling application service owns the transaction boundary so changes to a
-host and its details can be committed atomically.
+CRUD functions should generally add, query, delete, or flush ORM objects. The
+calling application service owns the transaction boundary so changes to a host
+and its details can be committed atomically. The rationale and conditions for
+reconsidering a repository abstraction are recorded in
+[ADR 0001](decisions/0001-functional-crud-for-persistence.md).
 
 ### Application services
 
 Application services implement Fourdrinier use cases. They load the relevant
-records through repositories, select the driver, perform the remote operation,
+records through CRUD functions, select the driver, perform the remote operation,
 and then persist the resulting local state.
 
 For example, starting a server follows this flow:
@@ -414,11 +417,12 @@ fourdrinier/
 ├── servers/service.py              server application use cases
 └── db/
     ├── models/                      Host and details persistence
-    ├── repositories/hosts.py        host persistence
-    └── repositories/servers.py      server persistence
+    └── crud/
+        ├── hosts/                   host persistence operations
+        └── servers/                 server persistence operations
 ```
 
-Application services depend on repositories and the driver contract. Drivers
+Application services depend on CRUD functions and the driver contract. Drivers
 depend on provider clients. API modules depend on application services. The
 reverse dependencies are not allowed.
 
@@ -432,7 +436,7 @@ to the new contract:
 2. replace the existing top-level Docker and Kubernetes host tables with the
    child-table shapes;
 3. require the request `type` discriminator and forbid extra fields;
-4. replace merged CRUD queries with `HostRepository` operations;
+4. replace merged provider queries with provider-neutral host CRUD operations;
 5. introduce the driver protocol and registry, initially for `ping`;
 6. move endpoint orchestration into application services;
 7. add server lifecycle methods to the driver contract only as their shared
@@ -469,6 +473,19 @@ secret material.
 Joined-table ORM inheritance could map the same physical schema, but provider
 behavior should not live on persistence entities. Explicit details composition
 plus application-level drivers keeps persistence and remote behavior separate.
+
+### Repository pattern
+
+A repository interface could isolate application services from persistence
+implementations and provide interchangeable SQLAlchemy, in-memory, or other
+backends. Fourdrinier currently has one SQLAlchemy implementation, and host
+services own the request-scoped session to define transaction boundaries. A
+repository would add indirection without currently removing that coupling.
+
+Functional CRUD modules are therefore the chosen persistence boundary. The
+repository pattern remains a valid future evolution if persistence becomes
+interchangeable or a unit-of-work abstraction takes ownership of sessions and
+transactions. See [ADR 0001](decisions/0001-functional-crud-for-persistence.md).
 
 ### Passing drivers into CRUD functions
 

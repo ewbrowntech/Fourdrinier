@@ -14,7 +14,7 @@ from fourdrinier.core.crypto import (
     encrypt_secret,
 )
 from fourdrinier.core.deps import SettingsDep
-from fourdrinier.db.crud import hosts as hosts_crud
+from fourdrinier.db.crud import docker_hosts as docker_hosts_crud
 from fourdrinier.db.crud import kubernetes_hosts as k8s_hosts_crud
 from fourdrinier.db.crud import ssh_keypairs as keypairs_crud
 from fourdrinier.db.deps import DbSession
@@ -50,7 +50,7 @@ AnyHost = DockerHost | KubernetesHost
 
 async def _get_any_host_or_404(session: DbSession, host_id: uuid.UUID) -> AnyHost:
     # Lookup order (docker first) is arbitrary; UUIDs never collide in practice.
-    host: AnyHost | None = await hosts_crud.get_host(session, host_id)
+    host: AnyHost | None = await docker_hosts_crud.get_host(session, host_id)
     if host is None:
         host = await k8s_hosts_crud.get_host(session, host_id)
     if host is None:
@@ -71,9 +71,6 @@ def _name_conflict(name: str) -> HTTPException:
 @router.post("", response_model=HostRead, status_code=status.HTTP_201_CREATED)
 async def create_host(body: HostCreate, session: DbSession, settings: SettingsDep) -> AnyHost:
     if isinstance(body, KubernetesHostCreate):
-        # Names must be unique across host types so the merged list is unambiguous.
-        if await hosts_crud.get_host_by_name(session, body.name) is not None:
-            raise _name_conflict(body.name)
         try:
             token_encrypted: bytes = encrypt_secret(body.token.encode(), settings)
         except EncryptionKeyError as exc:
@@ -100,10 +97,8 @@ async def create_host(body: HostCreate, session: DbSession, settings: SettingsDe
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"keypair {body.keypair_id} not found",
         )
-    if await k8s_hosts_crud.get_host_by_name(session, body.name) is not None:
-        raise _name_conflict(body.name)
     try:
-        return await hosts_crud.create_host(
+        return await docker_hosts_crud.create_host(
             session,
             name=body.name,
             address=body.address,
@@ -123,7 +118,7 @@ async def list_hosts(
     type: Literal["docker", "kubernetes"] | None = None,
 ) -> list[AnyHost]:
     docker_hosts: list[DockerHost] = (
-        await hosts_crud.list_hosts(session) if type in (None, "docker") else []
+        await docker_hosts_crud.list_hosts(session) if type in (None, "docker") else []
     )
     k8s_hosts: list[KubernetesHost] = (
         await k8s_hosts_crud.list_hosts(session) if type in (None, "kubernetes") else []
@@ -142,7 +137,7 @@ async def delete_host(host_id: uuid.UUID, session: DbSession) -> None:
     if isinstance(host, KubernetesHost):
         await k8s_hosts_crud.delete_host(session, host)
     else:
-        await hosts_crud.delete_host(session, host)
+        await docker_hosts_crud.delete_host(session, host)
 
 
 async def _ping_docker_host(

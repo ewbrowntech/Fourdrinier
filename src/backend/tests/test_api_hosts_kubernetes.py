@@ -154,8 +154,7 @@ async def test_duplicate_name_conflict(client: httpx.AsyncClient) -> None:
     assert resp.status_code == 409
 
 
-async def test_name_conflict_across_types(client: httpx.AsyncClient) -> None:
-    # kubernetes name blocks a docker host of the same name…
+async def test_same_name_across_legacy_host_types_is_allowed(client: httpx.AsyncClient) -> None:
     await _create_k8s_host(client, name="shared")
     keypair = (await client.post("/api/v1/keypairs", json={"name": "kp2"})).json()
     resp = await client.post(
@@ -168,9 +167,8 @@ async def test_name_conflict_across_types(client: httpx.AsyncClient) -> None:
             "keypair_id": keypair["id"],
         },
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 201
 
-    # …and a docker name blocks a kubernetes host of the same name.
     await _create_docker_host(client, name="shared2")
     resp = await client.post(
         "/api/v1/hosts",
@@ -182,7 +180,7 @@ async def test_name_conflict_across_types(client: httpx.AsyncClient) -> None:
             "token": FAKE_TOKEN,
         },
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 201
 
 
 async def test_list_merges_both_types(client: httpx.AsyncClient) -> None:
