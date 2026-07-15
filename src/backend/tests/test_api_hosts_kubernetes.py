@@ -154,7 +154,7 @@ async def test_duplicate_name_conflict(client: httpx.AsyncClient) -> None:
     assert resp.status_code == 409
 
 
-async def test_same_name_across_legacy_host_types_is_allowed(client: httpx.AsyncClient) -> None:
+async def test_same_name_across_host_types_is_rejected(client: httpx.AsyncClient) -> None:
     await _create_k8s_host(client, name="shared")
     keypair = (await client.post("/api/v1/keypairs", json={"name": "kp2"})).json()
     resp = await client.post(
@@ -167,7 +167,7 @@ async def test_same_name_across_legacy_host_types_is_allowed(client: httpx.Async
             "keypair_id": keypair["id"],
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 409
 
     await _create_docker_host(client, name="shared2")
     resp = await client.post(
@@ -180,7 +180,7 @@ async def test_same_name_across_legacy_host_types_is_allowed(client: httpx.Async
             "token": FAKE_TOKEN,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 409
 
 
 async def test_list_merges_both_types(client: httpx.AsyncClient) -> None:

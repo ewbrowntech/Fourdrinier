@@ -1,50 +1,38 @@
 """
 driver.py
 
-Provide the Kubernetes host driver boundary while remote ping wiring is pending.
+Implement Kubernetes operations behind the provider-neutral host driver boundary.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from fourdrinier.hosts.errors import (
-    HostDriverUnavailableError,
-    HostProviderMismatchError,
-)
-from fourdrinier.hosts.types import HostPingResult, HostType
+from fourdrinier.core.secrets import SecretDecryptor
+from fourdrinier.hosts.kubernetes import operations
+from fourdrinier.hosts.kubernetes.types import KubernetesHostPingResult
+from fourdrinier.hosts.types import HostType
 
 if TYPE_CHECKING:
     from fourdrinier.db.models import Host
 
 
 class KubernetesHostDriver:
-    """Represent Kubernetes operations behind the provider-neutral driver contract."""
+    """Perform Kubernetes operations through the cluster API."""
 
     type: HostType = HostType.KUBERNETES
 
-    async def ping(self, host: Host) -> HostPingResult:
-        """Reject Kubernetes ping requests until the provider is wired end to end.
+    def __init__(self, secret_decryptor: SecretDecryptor) -> None:
+        """Initialize the driver with credential decryption.
 
         Args:
-            host: Host aggregate with Kubernetes details loaded.
-
-        Returns:
-            Provider-neutral observations when Kubernetes ping is implemented.
-
-        Raises:
-            HostProviderMismatchError: If the host is not a Kubernetes host.
-            HostDriverUnavailableError: Because Kubernetes ping is not implemented yet.
+            secret_decryptor: Decryptor for the stored Kubernetes bearer token.
         """
-        if host.type is not self.type:
-            raise HostProviderMismatchError(
-                f"the Kubernetes driver cannot operate on a {host.type.value} host",
-                provider=self.type,
-            )
-        raise HostDriverUnavailableError(
-            "Kubernetes host ping is not implemented",
-            provider=self.type,
-        )
+        self._secret_decryptor: SecretDecryptor = secret_decryptor
+
+    async def ping(self, host: Host) -> KubernetesHostPingResult:
+        """Check cluster connectivity, identity, and deployment permissions."""
+        return await operations.ping(host, self._secret_decryptor)
 
 
 __all__: list[str] = ["KubernetesHostDriver"]

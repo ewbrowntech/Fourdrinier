@@ -20,17 +20,8 @@ from fourdrinier.hosts.docker.errors import (
     HostUnreachableError,
     SSHAuthError,
 )
+from fourdrinier.hosts.docker.types import ObservedHostKey
 from fourdrinier.hosts.ssh.keys import load_pkey
-
-
-@dataclass(frozen=True)
-class ObservedHostKey:
-    """Host key material observed or verified during a connection."""
-
-    key_type: str
-    key_b64: str
-    fingerprint: str
-    first_seen: bool
 
 
 @dataclass(frozen=True)

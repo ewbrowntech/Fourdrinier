@@ -6,59 +6,108 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy.exc import IntegrityError
 
-from fourdrinier.core.crypto import (
-    DecryptionError,
-    EncryptionKeyError,
-    encrypt_secret,
-)
+from fourdrinier.core.crypto import DecryptionError, EncryptionKeyError, FernetSecretCipher
 from fourdrinier.core.deps import SettingsDep
-from fourdrinier.db.crud import docker_hosts as docker_hosts_crud
-from fourdrinier.db.crud import kubernetes_hosts as k8s_hosts_crud
 from fourdrinier.db.crud import ssh_keypairs as keypairs_crud
 from fourdrinier.db.deps import DbSession
-from fourdrinier.db.models import DockerHost, KubernetesHost
+from fourdrinier.db.models import DockerHostDetails, Host, KubernetesHostDetails
 from fourdrinier.db.schemas import (
+    DockerHostCreate,
+    DockerHostRead,
     DockerPingResponse,
     HostCreate,
     HostListResponse,
     HostPingResponse,
     HostRead,
-    KubernetesHostCreate,
+    KubernetesHostRead,
     KubernetesPingResponse,
     PingHostKey,
 )
-from fourdrinier.hosts.docker import service as docker_service
-from fourdrinier.hosts.docker.errors import (
-    HostKeyMismatchError,
+from fourdrinier.hosts import (
+    HostAuthenticationError,
+    HostNameConflictError,
+    HostNotFoundError,
+    HostPermissionDeniedError,
+    HostPingResult,
+    HostTrustVerificationError,
+    HostType,
     HostUnreachableError,
-    SSHAuthError,
 )
-from fourdrinier.hosts.kubernetes import service as k8s_service
-from fourdrinier.hosts.kubernetes.errors import (
-    ClusterUnreachableError,
-    KubernetesAuthError,
-    KubernetesRBACError,
-    TLSVerificationError,
+from fourdrinier.hosts.docker import DockerHostDriver, DockerHostPingResult
+from fourdrinier.hosts.drivers import HostDriverRegistry
+from fourdrinier.hosts.kubernetes import (
+    KubernetesHostDriver,
+    KubernetesHostPingResult,
 )
+from fourdrinier.hosts.service import HostService
 
 router: APIRouter = APIRouter(prefix="/hosts", tags=["hosts"])
 
-AnyHost = DockerHost | KubernetesHost
 
-
-async def _get_any_host_or_404(session: DbSession, host_id: uuid.UUID) -> AnyHost:
-    # Lookup order (docker first) is arbitrary; UUIDs never collide in practice.
-    host: AnyHost | None = await docker_hosts_crud.get_host(session, host_id)
-    if host is None:
-        host = await k8s_hosts_crud.get_host(session, host_id)
-    if host is None:
+def _host_service(session: DbSession, settings: SettingsDep) -> HostService:
+    try:
+        cipher: FernetSecretCipher = FernetSecretCipher.from_settings(settings)
+    except EncryptionKeyError as exc:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"host {host_id} not found",
-        )
-    return host
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    drivers: HostDriverRegistry = HostDriverRegistry(
+        DockerHostDriver(cipher),
+        KubernetesHostDriver(cipher),
+    )
+    service: HostService = HostService(
+        session=session,
+        drivers=drivers,
+        secret_encryptor=cipher,
+    )
+    return service
+
+
+def _docker_host_read(host: Host) -> DockerHostRead:
+    details: DockerHostDetails | None = host.docker_details
+    if details is None:
+        raise RuntimeError(f"Docker host {host.id} has no Docker details")
+    response: DockerHostRead = DockerHostRead(
+        id=host.id,
+        name=host.name,
+        enabled=host.enabled,
+        labels=host.labels,
+        last_seen_at=host.last_seen_at,
+        created_at=host.created_at,
+        updated_at=host.updated_at,
+        address=details.address,
+        port=details.port,
+        username=details.username,
+        keypair_id=details.keypair_id,
+        host_key_fingerprint=details.host_key_fingerprint,
+    )
+    return response
+
+
+def _kubernetes_host_read(host: Host) -> KubernetesHostRead:
+    details: KubernetesHostDetails | None = host.kubernetes_details
+    if details is None:
+        raise RuntimeError(f"Kubernetes host {host.id} has no Kubernetes details")
+    response: KubernetesHostRead = KubernetesHostRead(
+        id=host.id,
+        name=host.name,
+        enabled=host.enabled,
+        labels=host.labels,
+        last_seen_at=host.last_seen_at,
+        created_at=host.created_at,
+        updated_at=host.updated_at,
+        api_url=details.api_url,
+        namespace=details.namespace,
+    )
+    return response
+
+
+def _host_read(host: Host) -> DockerHostRead | KubernetesHostRead:
+    if host.type is HostType.DOCKER:
+        return _docker_host_read(host)
+    return _kubernetes_host_read(host)
 
 
 def _name_conflict(name: str) -> HTTPException:
@@ -68,104 +117,66 @@ def _name_conflict(name: str) -> HTTPException:
     )
 
 
-@router.post("", response_model=HostRead, status_code=status.HTTP_201_CREATED)
-async def create_host(body: HostCreate, session: DbSession, settings: SettingsDep) -> AnyHost:
-    if isinstance(body, KubernetesHostCreate):
-        try:
-            token_encrypted: bytes = encrypt_secret(body.token.encode(), settings)
-        except EncryptionKeyError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=str(exc),
-            ) from exc
-        try:
-            return await k8s_hosts_crud.create_host(
-                session,
-                name=body.name,
-                api_url=body.api_url,
-                ca_cert_pem=body.ca_cert_pem,
-                token_encrypted=token_encrypted,
-                namespace=body.namespace,
-                enabled=body.enabled,
-                labels=body.labels,
-            )
-        except IntegrityError as exc:
-            raise _name_conflict(body.name) from exc
+def _not_found(exc: HostNotFoundError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=str(exc),
+    )
 
-    if await keypairs_crud.get_keypair(session, body.keypair_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"keypair {body.keypair_id} not found",
-        )
+
+@router.post("", response_model=HostRead, status_code=status.HTTP_201_CREATED)
+async def create_host(
+    body: HostCreate, session: DbSession, settings: SettingsDep
+) -> DockerHostRead | KubernetesHostRead:
+    if isinstance(body, DockerHostCreate):
+        if await keypairs_crud.get_keypair(session, body.keypair_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"keypair {body.keypair_id} not found",
+            )
+    service: HostService = _host_service(session, settings)
     try:
-        return await docker_hosts_crud.create_host(
-            session,
-            name=body.name,
-            address=body.address,
-            port=body.port,
-            username=body.username,
-            keypair_id=body.keypair_id,
-            enabled=body.enabled,
-            labels=body.labels,
-        )
-    except IntegrityError as exc:
+        host: Host = await service.create(body)
+    except HostNameConflictError as exc:
         raise _name_conflict(body.name) from exc
+    return _host_read(host)
 
 
 @router.get("", response_model=HostListResponse)
 async def list_hosts(
     session: DbSession,
+    settings: SettingsDep,
     type: Literal["docker", "kubernetes"] | None = None,
-) -> list[AnyHost]:
-    docker_hosts: list[DockerHost] = (
-        await docker_hosts_crud.list_hosts(session) if type in (None, "docker") else []
-    )
-    k8s_hosts: list[KubernetesHost] = (
-        await k8s_hosts_crud.list_hosts(session) if type in (None, "kubernetes") else []
-    )
-    return sorted([*docker_hosts, *k8s_hosts], key=lambda host: host.name)
+) -> list[DockerHostRead | KubernetesHostRead]:
+    service: HostService = _host_service(session, settings)
+    host_type: HostType | None = HostType(type) if type is not None else None
+    hosts: list[Host] = await service.list(host_type)
+    return [_host_read(host) for host in hosts]
 
 
 @router.get("/{host_id}", response_model=HostRead)
-async def get_host(host_id: uuid.UUID, session: DbSession) -> AnyHost:
-    return await _get_any_host_or_404(session, host_id)
+async def get_host(
+    host_id: uuid.UUID, session: DbSession, settings: SettingsDep
+) -> DockerHostRead | KubernetesHostRead:
+    service: HostService = _host_service(session, settings)
+    try:
+        host: Host = await service.get(host_id)
+    except HostNotFoundError as exc:
+        raise _not_found(exc) from exc
+    return _host_read(host)
 
 
 @router.delete("/{host_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_host(host_id: uuid.UUID, session: DbSession) -> None:
-    host: AnyHost = await _get_any_host_or_404(session, host_id)
-    if isinstance(host, KubernetesHost):
-        await k8s_hosts_crud.delete_host(session, host)
-    else:
-        await docker_hosts_crud.delete_host(session, host)
-
-
-async def _ping_docker_host(
-    session: DbSession, host: DockerHost, settings: SettingsDep
-) -> DockerPingResponse:
+async def delete_host(host_id: uuid.UUID, session: DbSession, settings: SettingsDep) -> None:
+    service: HostService = _host_service(session, settings)
     try:
-        result: docker_service.PingResult = await docker_service.ping_host(session, host, settings)
-    except HostKeyMismatchError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-    except SSHAuthError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
-    except HostUnreachableError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
-    except (EncryptionKeyError, DecryptionError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-    return DockerPingResponse(
+        await service.delete(host_id)
+    except HostNotFoundError as exc:
+        raise _not_found(exc) from exc
+
+
+def _docker_ping_response(result: DockerHostPingResult) -> DockerPingResponse:
+    response: DockerPingResponse = DockerPingResponse(
         latency_ms=result.latency_ms,
         docker_version=result.docker_version,
         api_version=result.api_version,
@@ -177,55 +188,54 @@ async def _ping_docker_host(
             first_seen=result.host_key.first_seen,
         ),
     )
+    return response
 
 
-async def _ping_kubernetes_host(
-    session: DbSession, host: KubernetesHost, settings: SettingsDep
-) -> KubernetesPingResponse:
-    try:
-        result: k8s_service.PingResult = await k8s_service.ping_host(session, host, settings)
-    except TLSVerificationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-    except KubernetesAuthError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
-    except ClusterUnreachableError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
-    except KubernetesRBACError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
-        ) from exc
-    except (EncryptionKeyError, DecryptionError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-    return KubernetesPingResponse(
+def _kubernetes_ping_response(result: KubernetesHostPingResult) -> KubernetesPingResponse:
+    response: KubernetesPingResponse = KubernetesPingResponse(
         latency_ms=result.latency_ms,
         git_version=result.git_version,
         platform=result.platform,
         username=result.username,
         namespace=result.namespace,
     )
+    return response
 
 
 @router.post("/{host_id}/ping", response_model=HostPingResponse)
 async def ping_host(
     host_id: uuid.UUID, session: DbSession, settings: SettingsDep
 ) -> DockerPingResponse | KubernetesPingResponse:
-    host: AnyHost = await _get_any_host_or_404(session, host_id)
-    if isinstance(host, KubernetesHost):
-        return await _ping_kubernetes_host(session, host, settings)
-    return await _ping_docker_host(session, host, settings)
+    service: HostService = _host_service(session, settings)
+    try:
+        result: HostPingResult = await service.ping(host_id)
+    except HostNotFoundError as exc:
+        raise _not_found(exc) from exc
+    except HostTrustVerificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (HostAuthenticationError, HostUnreachableError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    except HostPermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except DecryptionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    if isinstance(result, DockerHostPingResult):
+        return _docker_ping_response(result)
+    if isinstance(result, KubernetesHostPingResult):
+        return _kubernetes_ping_response(result)
+    raise RuntimeError(f"host {host_id} returned an unsupported ping result")
 
 
-__all__ = ["router"]
+__all__: list[str] = ["router"]

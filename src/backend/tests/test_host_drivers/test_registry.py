@@ -1,7 +1,7 @@
 """
-test_host_drivers.py
+test_registry.py
 
-Unit tests for the provider-neutral host driver boundary and registry.
+Unit tests for the provider-neutral host driver registry.
 """
 
 from __future__ import annotations
@@ -13,14 +13,11 @@ import pytest
 from fourdrinier.db.models import Host
 from fourdrinier.hosts import (
     HostDriverNotRegisteredError,
-    HostDriverUnavailableError,
     HostPingResult,
     HostProviderMismatchError,
     HostType,
 )
-from fourdrinier.hosts.docker import DockerHostDriver
 from fourdrinier.hosts.drivers import HostDriver, HostDriverRegistry
-from fourdrinier.hosts.kubernetes import KubernetesHostDriver
 
 
 class _StubHostDriver:
@@ -104,80 +101,3 @@ def test_host_driver_registry_for_host_003_anomalous_provider_is_not_registered(
 
     # Assert
     assert isinstance(captured.value.__cause__, KeyError)
-
-
-@pytest.mark.parametrize(
-    ("driver", "host_type", "message"),
-    [
-        pytest.param(
-            DockerHostDriver(),
-            HostType.DOCKER,
-            "Docker host ping is not implemented",
-            id="docker",
-        ),
-        pytest.param(
-            KubernetesHostDriver(),
-            HostType.KUBERNETES,
-            "Kubernetes host ping is not implemented",
-            id="kubernetes",
-        ),
-    ],
-)
-async def test_host_driver_ping_004_anomalous_placeholder_is_unavailable(
-    driver: HostDriver,
-    host_type: HostType,
-    message: str,
-) -> None:
-    """Test 004 - Anomalous
-    Condition: A matching host is passed to a placeholder provider driver
-    Result: HostDriverUnavailableError reports that ping is not implemented
-    """
-    # Arrange
-    host: Host = Host(type=host_type, name="production")
-
-    # Act
-    with pytest.raises(HostDriverUnavailableError, match=message) as captured:
-        await driver.ping(host)
-
-    # Assert
-    assert captured.value.provider is host_type
-
-
-@pytest.mark.parametrize(
-    ("driver", "host_type", "driver_name"),
-    [
-        pytest.param(
-            DockerHostDriver(),
-            HostType.KUBERNETES,
-            "Docker",
-            id="docker-with-kubernetes-host",
-        ),
-        pytest.param(
-            KubernetesHostDriver(),
-            HostType.DOCKER,
-            "Kubernetes",
-            id="kubernetes-with-docker-host",
-        ),
-    ],
-)
-async def test_host_driver_ping_005_anomalous_host_type_does_not_match_driver(
-    driver: HostDriver,
-    host_type: HostType,
-    driver_name: str,
-) -> None:
-    """Test 005 - Anomalous
-    Condition: A provider driver receives a host belonging to the other provider
-    Result: HostProviderMismatchError is raised before any remote operation
-    """
-    # Arrange
-    host: Host = Host(type=host_type, name="production")
-
-    # Act
-    with pytest.raises(
-        HostProviderMismatchError,
-        match=f"the {driver_name} driver cannot operate on a {host_type.value} host",
-    ) as captured:
-        await driver.ping(host)
-
-    # Assert
-    assert captured.value.provider is driver.type
