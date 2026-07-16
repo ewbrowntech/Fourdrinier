@@ -1,5 +1,5 @@
 """API tests for kubernetes hosts on /api/v1/hosts, with the HTTPS layer
-mocked at the ``_ping_cluster`` boundary so persistence still executes."""
+mocked at the provider transport boundary so persistence still executes."""
 
 from __future__ import annotations
 
@@ -13,18 +13,18 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import NameOID
 
-from fourdrinier.hosts.kubernetes import service as k8s_service
 from fourdrinier.hosts.kubernetes.errors import (
     ClusterUnreachableError,
     KubernetesAuthError,
     KubernetesRBACError,
     TLSVerificationError,
 )
-from fourdrinier.hosts.kubernetes.service import PingResult
+from fourdrinier.hosts.kubernetes.operations import ping as kubernetes_ping
+from fourdrinier.hosts.kubernetes.operations.ping import KubernetesPingObservation
 
 FAKE_TOKEN = "eyJhbGciOiJSUzI1NiJ9.fake.token"
 
-FAKE_PING = PingResult(
+FAKE_PING = KubernetesPingObservation(
     latency_ms=8.7,
     git_version="v1.31.4+k3s1",
     platform="linux/amd64",
@@ -218,11 +218,11 @@ async def test_ping_success_records_last_seen(
 ) -> None:
     captured: dict[str, Any] = {}
 
-    async def fake_ping(**kwargs: Any) -> PingResult:
+    async def fake_ping(**kwargs: Any) -> KubernetesPingObservation:
         captured.update(kwargs)
         return FAKE_PING
 
-    monkeypatch.setattr(k8s_service, "_ping_cluster", fake_ping)
+    monkeypatch.setattr(kubernetes_ping, "_ping_remote", fake_ping)
     host = await _create_k8s_host(client)
 
     resp = await client.post(f"/api/v1/hosts/{host['id']}/ping")
@@ -257,10 +257,10 @@ async def test_ping_error_mapping(
     error: Exception,
     expected_status: int,
 ) -> None:
-    async def fake_ping(**kwargs: Any) -> PingResult:
+    async def fake_ping(**kwargs: Any) -> KubernetesPingObservation:
         raise error
 
-    monkeypatch.setattr(k8s_service, "_ping_cluster", fake_ping)
+    monkeypatch.setattr(kubernetes_ping, "_ping_remote", fake_ping)
     host = await _create_k8s_host(client)
     resp = await client.post(f"/api/v1/hosts/{host['id']}/ping")
     assert resp.status_code == expected_status

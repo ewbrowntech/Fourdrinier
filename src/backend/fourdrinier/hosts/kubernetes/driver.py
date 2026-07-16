@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from fourdrinier.core.secrets import SecretDecryptor
-from fourdrinier.hosts.kubernetes import operations
+from fourdrinier.hosts.kubernetes.operations.ping import ping
 from fourdrinier.hosts.kubernetes.types import KubernetesHostPingResult
 from fourdrinier.hosts.types import HostType
 
@@ -32,7 +32,7 @@ class KubernetesHostDriver:
 
     async def ping(self, host: Host) -> KubernetesHostPingResult:
         """Check cluster connectivity, identity, and deployment permissions."""
-        return await operations.ping(host, self._secret_decryptor)
+        return await ping(host, self._secret_decryptor)
 
 
 __all__: list[str] = ["KubernetesHostDriver"]

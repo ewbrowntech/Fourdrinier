@@ -13,10 +13,8 @@ from alembic import context
 from fourdrinier.core.settings import SETTINGS
 from fourdrinier.db.base import Base
 from fourdrinier.db.models import (  # noqa: F401 — register models on metadata
-    DockerHost,
     DockerHostDetails,
     Host,
-    KubernetesHost,
     KubernetesHostDetails,
     SSHKeypair,
 )

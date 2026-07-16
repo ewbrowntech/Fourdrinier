@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from fourdrinier.core.secrets import SecretDecryptor
-from fourdrinier.hosts.docker import operations
+from fourdrinier.hosts.docker.operations.ping import ping
 from fourdrinier.hosts.docker.types import DockerHostPingResult
 from fourdrinier.hosts.types import HostType
 
@@ -32,7 +32,7 @@ class DockerHostDriver:
 
     async def ping(self, host: Host) -> DockerHostPingResult:
         """Check Docker daemon connectivity and SSH host-key trust."""
-        return await operations.ping(host, self._secret_decryptor)
+        return await ping(host, self._secret_decryptor)
 
 
 __all__: list[str] = ["DockerHostDriver"]

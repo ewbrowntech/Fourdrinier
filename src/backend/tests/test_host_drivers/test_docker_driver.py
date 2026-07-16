@@ -32,7 +32,6 @@ from fourdrinier.hosts.docker import (
     DockerHostPingResult,
     ObservedHostKey,
 )
-from fourdrinier.hosts.docker import service as docker_service
 from fourdrinier.hosts.docker.client import KnownHostKey
 from fourdrinier.hosts.docker.errors import (
     HostKeyMismatchError,
@@ -41,6 +40,8 @@ from fourdrinier.hosts.docker.errors import (
 from fourdrinier.hosts.docker.errors import (
     HostUnreachableError as DockerHostUnreachableError,
 )
+from fourdrinier.hosts.docker.operations import ping as docker_ping
+from fourdrinier.hosts.docker.operations.ping import DockerPingObservation
 
 _HOST_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000301")
 _KEYPAIR_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000302")
@@ -50,7 +51,7 @@ _HOST_KEY: ObservedHostKey = ObservedHostKey(
     fingerprint="SHA256:fake-fingerprint",
     first_seen=True,
 )
-_REMOTE_RESULT: docker_service.PingResult = docker_service.PingResult(
+_REMOTE_RESULT: DockerPingObservation = DockerPingObservation(
     latency_ms=12.3,
     docker_version="27.0.1",
     api_version="1.41",
@@ -116,11 +117,11 @@ async def test_docker_host_driver_ping_002_nominal_daemon_is_observed(
     # Arrange
     captured: dict[str, Any] = {}
 
-    def ping_blocking(**kwargs: Any) -> docker_service.PingResult:
+    def ping_blocking(**kwargs: Any) -> DockerPingObservation:
         captured.update(kwargs)
         return _REMOTE_RESULT
 
-    monkeypatch.setattr(docker_service, "_ping_blocking", ping_blocking)
+    monkeypatch.setattr(docker_ping, "_ping_remote", ping_blocking)
     decryptor: Mock = Mock(spec=SecretDecryptor)
     decryptor.decrypt.return_value = PlaintextSecret(b"private-key-pem")
     driver: DockerHostDriver = DockerHostDriver(cast(SecretDecryptor, decryptor))
@@ -266,11 +267,11 @@ async def test_docker_host_driver_ping_007_nominal_recorded_host_key_is_reused(
     # Arrange
     captured: dict[str, Any] = {}
 
-    def ping_blocking(**kwargs: Any) -> docker_service.PingResult:
+    def ping_blocking(**kwargs: Any) -> DockerPingObservation:
         captured.update(kwargs)
         return _REMOTE_RESULT
 
-    monkeypatch.setattr(docker_service, "_ping_blocking", ping_blocking)
+    monkeypatch.setattr(docker_ping, "_ping_remote", ping_blocking)
     decryptor: Mock = Mock(spec=SecretDecryptor)
     decryptor.decrypt.return_value = PlaintextSecret(b"private-key-pem")
     driver: DockerHostDriver = DockerHostDriver(cast(SecretDecryptor, decryptor))
@@ -320,10 +321,10 @@ async def test_docker_host_driver_ping_008_anomalous_provider_failure_is_transla
     """
 
     # Arrange
-    def ping_blocking(**_kwargs: Any) -> docker_service.PingResult:
+    def ping_blocking(**_kwargs: Any) -> DockerPingObservation:
         raise provider_error
 
-    monkeypatch.setattr(docker_service, "_ping_blocking", ping_blocking)
+    monkeypatch.setattr(docker_ping, "_ping_remote", ping_blocking)
     decryptor: Mock = Mock(spec=SecretDecryptor)
     decryptor.decrypt.return_value = PlaintextSecret(b"private-key-pem")
     driver: DockerHostDriver = DockerHostDriver(cast(SecretDecryptor, decryptor))

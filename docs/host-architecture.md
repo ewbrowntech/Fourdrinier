@@ -1,6 +1,6 @@
 # Host Architecture
 
-Status: Proposed
+Status: Accepted — host registration and ping implemented; server lifecycle pending
 
 This document defines how Fourdrinier represents and operates Docker and
 Kubernetes hosts through one user-facing host model. It is the target
@@ -45,10 +45,11 @@ role and lifecycle:
 - Fourdrinier can check its connectivity;
 - Fourdrinier can use it to create and operate servers.
 
-The current implementation exposes a unified `/hosts` API but stores Docker
-and Kubernetes hosts as independent top-level database records. Shared fields
-are duplicated, global name uniqueness is enforced in application code, and
-common operations must query and dispatch across both tables.
+The previous implementation exposed a unified `/hosts` API but stored Docker
+and Kubernetes hosts as independent top-level database records. The host
+rewrite replaced those records with the shared aggregate defined here. Server
+lifecycle behavior remains pending the design decisions at the end of this
+document.
 
 ## Goals
 
@@ -408,10 +409,12 @@ fourdrinier/
 │   ├── drivers.py                  protocol and registry
 │   ├── docker/
 │   │   ├── driver.py               DockerHostDriver
+│   │   ├── operations/              One module per provider operation
 │   │   ├── client.py               Docker transport construction
 │   │   └── errors.py
 │   └── kubernetes/
 │       ├── driver.py               KubernetesHostDriver
+│       ├── operations/              One module per provider operation
 │       ├── client.py               Kubernetes transport construction
 │       └── errors.py
 ├── servers/service.py              server application use cases

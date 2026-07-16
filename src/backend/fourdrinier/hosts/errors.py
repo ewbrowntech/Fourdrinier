@@ -21,6 +21,10 @@ class HostNameConflictError(HostError):
     """A host with the requested globally unique name already exists."""
 
 
+class HostKeypairNotFoundError(HostError):
+    """The SSH keypair selected for a Docker host does not exist."""
+
+
 class HostProviderMismatchError(HostError):
     """Host details or a driver do not match the host provider type."""
 
@@ -63,6 +67,7 @@ __all__ = [
     "HostDriverUnavailableError",
     "HostError",
     "HostInvalidRemoteStateError",
+    "HostKeypairNotFoundError",
     "HostNameConflictError",
     "HostNotFoundError",
     "HostPermissionDeniedError",

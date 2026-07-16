@@ -1,9 +1,5 @@
 """
 __init__.py
 
-Expose Kubernetes host operations used by the driver.
+Group Kubernetes host operations by use case.
 """
-
-from fourdrinier.hosts.kubernetes.operations.ping import ping
-
-__all__: list[str] = ["ping"]

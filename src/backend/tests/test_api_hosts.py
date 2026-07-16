@@ -8,13 +8,14 @@ from typing import Any
 import httpx
 import pytest
 
-from fourdrinier.hosts.docker import service as docker_service
 from fourdrinier.hosts.docker.errors import (
     HostKeyMismatchError,
     HostUnreachableError,
     SSHAuthError,
 )
-from fourdrinier.hosts.docker.service import ObservedHostKey, PingResult
+from fourdrinier.hosts.docker.operations import ping as docker_ping
+from fourdrinier.hosts.docker.operations.ping import DockerPingObservation
+from fourdrinier.hosts.docker.types import ObservedHostKey
 
 FAKE_HOST_KEY = ObservedHostKey(
     key_type="ssh-ed25519",
@@ -23,7 +24,7 @@ FAKE_HOST_KEY = ObservedHostKey(
     first_seen=True,
 )
 
-FAKE_PING = PingResult(
+FAKE_PING = DockerPingObservation(
     latency_ms=12.3,
     docker_version="27.0.1",
     api_version="1.41",
@@ -101,7 +102,7 @@ async def test_list_get_delete_host(client: httpx.AsyncClient) -> None:
 async def test_ping_success_records_tofu_key(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(docker_service, "_ping_blocking", lambda **kwargs: FAKE_PING)
+    monkeypatch.setattr(docker_ping, "_ping_remote", lambda **kwargs: FAKE_PING)
     host = await _create_host(client)
 
     resp = await client.post(f"/api/v1/hosts/{host['id']}/ping")
@@ -122,11 +123,11 @@ async def test_ping_passes_recorded_key_for_verification(
 ) -> None:
     seen_known_keys: list[Any] = []
 
-    def fake_ping(**kwargs: Any) -> PingResult:
+    def fake_ping(**kwargs: Any) -> DockerPingObservation:
         seen_known_keys.append(kwargs["known_host_key"])
         return FAKE_PING
 
-    monkeypatch.setattr(docker_service, "_ping_blocking", fake_ping)
+    monkeypatch.setattr(docker_ping, "_ping_remote", fake_ping)
     host = await _create_host(client)
     await client.post(f"/api/v1/hosts/{host['id']}/ping")
     await client.post(f"/api/v1/hosts/{host['id']}/ping")
@@ -151,10 +152,10 @@ async def test_ping_error_mapping(
     error: Exception,
     expected_status: int,
 ) -> None:
-    def fake_ping(**kwargs: Any) -> PingResult:
+    def fake_ping(**kwargs: Any) -> DockerPingObservation:
         raise error
 
-    monkeypatch.setattr(docker_service, "_ping_blocking", fake_ping)
+    monkeypatch.setattr(docker_ping, "_ping_remote", fake_ping)
     host = await _create_host(client)
     resp = await client.post(f"/api/v1/hosts/{host['id']}/ping")
     assert resp.status_code == expected_status

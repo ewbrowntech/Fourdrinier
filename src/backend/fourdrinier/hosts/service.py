@@ -11,10 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fourdrinier.core.secrets import PlaintextSecret, SecretEncryptor
 from fourdrinier.db.crud import hosts as hosts_crud
-from fourdrinier.db.models import DockerHostDetails, Host, KubernetesHostDetails
+from fourdrinier.db.crud import ssh_keypairs as keypairs_crud
+from fourdrinier.db.models import (
+    DockerHostDetails,
+    Host,
+    KubernetesHostDetails,
+    SSHKeypair,
+)
 from fourdrinier.db.schemas.host import DockerHostCreate, HostCreate, KubernetesHostCreate
 from fourdrinier.hosts.drivers import HostDriver, HostDriverRegistry
 from fourdrinier.hosts.errors import (
+    HostKeypairNotFoundError,
     HostNameConflictError,
     HostNotFoundError,
     HostProviderMismatchError,
@@ -114,11 +121,22 @@ class HostService:
             The newly persisted host aggregate.
 
         Raises:
+            HostKeypairNotFoundError: If a Docker host selects an unknown SSH keypair.
             HostNameConflictError: If the requested host name already exists.
             HostProviderMismatchError: If details declare the wrong provider.
             SecretError: If provider credentials cannot be encrypted.
         """
         try:
+            if isinstance(request, DockerHostCreate):
+                keypair: SSHKeypair | None = await keypairs_crud.get_keypair(
+                    self._session,
+                    request.keypair_id,
+                )
+                if keypair is None:
+                    raise HostKeypairNotFoundError(
+                        f"keypair {request.keypair_id} not found",
+                        provider=HostType.DOCKER,
+                    )
             host: Host = self._build_host(request)
             created: Host = await hosts_crud.create_host(self._session, host)
             await self._session.commit()

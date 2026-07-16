@@ -3,7 +3,6 @@
 from fourdrinier.db.base import Base
 from fourdrinier.db.deps import DbSession
 from fourdrinier.db.models import (
-    DockerHost,
     DockerHostDetails,
     Host,
     KeypairSource,
@@ -15,7 +14,6 @@ from fourdrinier.db.session import create_engine, create_session_factory, get_se
 __all__ = [
     "Base",
     "DbSession",
-    "DockerHost",
     "DockerHostDetails",
     "Host",
     "KeypairSource",

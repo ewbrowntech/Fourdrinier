@@ -1,4 +1,4 @@
-"""Unit tests for the kubernetes ``_ping_cluster`` boundary via MockTransport."""
+"""Unit tests for the Kubernetes ping operation via MockTransport."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from fourdrinier.hosts.kubernetes.errors import (
     KubernetesRBACError,
     TLSVerificationError,
 )
-from fourdrinier.hosts.kubernetes.service import _ping_cluster
+from fourdrinier.hosts.kubernetes.operations import ping as kubernetes_ping
 from tests.test_api_hosts_kubernetes import CA_PEM
 
 API_URL = "https://203.0.113.20:6443"
@@ -46,7 +46,7 @@ def _happy_handler(
 
 
 async def _ping(handler: Callable[[httpx.Request], httpx.Response], namespace: str = "fourdrinier"):
-    return await _ping_cluster(
+    return await kubernetes_ping._ping_remote(
         api_url=API_URL,
         token="token",
         ca_cert_pem=CA_PEM,

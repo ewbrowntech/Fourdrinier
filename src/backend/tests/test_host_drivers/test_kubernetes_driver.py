@@ -27,13 +27,14 @@ from fourdrinier.hosts.kubernetes import (
     KubernetesHostDriver,
     KubernetesHostPingResult,
 )
-from fourdrinier.hosts.kubernetes import service as kubernetes_service
 from fourdrinier.hosts.kubernetes.errors import (
     ClusterUnreachableError,
     KubernetesAuthError,
     KubernetesRBACError,
     TLSVerificationError,
 )
+from fourdrinier.hosts.kubernetes.operations import ping as kubernetes_ping
+from fourdrinier.hosts.kubernetes.operations.ping import KubernetesPingObservation
 
 _HOST_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000201")
 
@@ -85,7 +86,7 @@ async def test_kubernetes_host_driver_ping_002_nominal_cluster_is_observed(
     # Arrange
     decryptor: Mock = Mock(spec=SecretDecryptor)
     decryptor.decrypt.return_value = PlaintextSecret(b"service-account-token")
-    remote_result: kubernetes_service.PingResult = kubernetes_service.PingResult(
+    remote_result: KubernetesPingObservation = KubernetesPingObservation(
         latency_ms=8.7,
         git_version="v1.31.4+k3s1",
         platform="linux/amd64",
@@ -93,10 +94,10 @@ async def test_kubernetes_host_driver_ping_002_nominal_cluster_is_observed(
         namespace="fourdrinier",
     )
     ping_cluster: AsyncMock = AsyncMock(
-        spec=kubernetes_service._ping_cluster,
+        spec=kubernetes_ping._ping_remote,
         return_value=remote_result,
     )
-    monkeypatch.setattr(kubernetes_service, "_ping_cluster", ping_cluster)
+    monkeypatch.setattr(kubernetes_ping, "_ping_remote", ping_cluster)
     driver: KubernetesHostDriver = KubernetesHostDriver(cast(SecretDecryptor, decryptor))
     host: Host = _kubernetes_host()
 
@@ -204,10 +205,10 @@ async def test_kubernetes_host_driver_ping_005_anomalous_provider_failure_is_tra
     decryptor: Mock = Mock(spec=SecretDecryptor)
     decryptor.decrypt.return_value = PlaintextSecret(b"service-account-token")
     ping_cluster: AsyncMock = AsyncMock(
-        spec=kubernetes_service._ping_cluster,
+        spec=kubernetes_ping._ping_remote,
         side_effect=provider_error,
     )
-    monkeypatch.setattr(kubernetes_service, "_ping_cluster", ping_cluster)
+    monkeypatch.setattr(kubernetes_ping, "_ping_remote", ping_cluster)
     driver: KubernetesHostDriver = KubernetesHostDriver(cast(SecretDecryptor, decryptor))
 
     # Act

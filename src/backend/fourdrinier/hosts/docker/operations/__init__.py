@@ -1,9 +1,5 @@
 """
 __init__.py
 
-Expose Docker host operations used by the driver.
+Group Docker host operations by use case.
 """
-
-from fourdrinier.hosts.docker.operations.ping import ping
-
-__all__: list[str] = ["ping"]

@@ -19,9 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fourdrinier.core.secrets import EncryptedSecret, SecretEncryptor
 from fourdrinier.db.crud import hosts as hosts_crud
+from fourdrinier.db.crud import ssh_keypairs as keypairs_crud
 from fourdrinier.db.models import Host
 from fourdrinier.db.schemas.host import DockerHostCreate, HostCreate, KubernetesHostCreate
 from fourdrinier.hosts import (
+    HostKeypairNotFoundError,
     HostNameConflictError,
     HostNotFoundError,
     HostPingResult,
@@ -41,6 +43,7 @@ class _CrudMocks:
     create_host: AsyncMock
     delete_host: AsyncMock
     get_host: AsyncMock
+    get_keypair: AsyncMock
     list_hosts: AsyncMock
 
 
@@ -57,15 +60,19 @@ def crud(monkeypatch: pytest.MonkeyPatch) -> _CrudMocks:
     create_host: AsyncMock = AsyncMock(spec=hosts_crud.create_host)
     delete_host: AsyncMock = AsyncMock(spec=hosts_crud.delete_host)
     get_host: AsyncMock = AsyncMock(spec=hosts_crud.get_host)
+    get_keypair: AsyncMock = AsyncMock(spec=keypairs_crud.get_keypair)
     list_hosts: AsyncMock = AsyncMock(spec=hosts_crud.list_hosts)
     monkeypatch.setattr(hosts_crud, "create_host", create_host)
     monkeypatch.setattr(hosts_crud, "delete_host", delete_host)
     monkeypatch.setattr(hosts_crud, "get_host", get_host)
+    monkeypatch.setattr(keypairs_crud, "get_keypair", get_keypair)
     monkeypatch.setattr(hosts_crud, "list_hosts", list_hosts)
+    get_keypair.return_value = object()
     return _CrudMocks(
         create_host=create_host,
         delete_host=delete_host,
         get_host=get_host,
+        get_keypair=get_keypair,
         list_hosts=list_hosts,
     )
 
@@ -149,6 +156,7 @@ async def test_host_service_create_001_nominal_docker_aggregate_is_committed(
     assert persisted.docker_details.keypair_id == request.keypair_id
     assert persisted.kubernetes_details is None
     crud.create_host.assert_awaited_once_with(session, persisted)
+    crud.get_keypair.assert_awaited_once_with(session, _KEYPAIR_ID)
     _secret_encryptor.encrypt.assert_not_called()
     session.commit.assert_awaited_once_with()
     session.rollback.assert_not_awaited()
@@ -188,6 +196,7 @@ async def test_host_service_create_002_nominal_kubernetes_token_is_encrypted(
     assert persisted.kubernetes_details.namespace == request.namespace
     _secret_encryptor.encrypt.assert_called_once_with(b"service-account-token")
     crud.create_host.assert_awaited_once_with(session, persisted)
+    crud.get_keypair.assert_not_awaited()
     session.commit.assert_awaited_once_with()
     session.rollback.assert_not_awaited()
 
@@ -377,6 +386,36 @@ async def test_host_service_create_007_anomalous_non_integrity_failure_is_rolled
 
     # Assert
     assert captured.value is failure
+    session.commit.assert_not_awaited()
+    session.rollback.assert_awaited_once_with()
+
+
+async def test_host_service_create_017_anomalous_docker_keypair_does_not_exist(
+    crud: _CrudMocks,
+) -> None:
+    """Test 017 - Anomalous
+    Condition: A Docker request selects an SSH keypair that does not exist
+    Result: HostKeypairNotFoundError is raised before persistence and the transaction rolls back
+    """
+    # Arrange
+    service: HostService
+    session: AsyncMock
+    _drivers: Mock
+    _secret_encryptor: Mock
+    service, session, _drivers, _secret_encryptor = _service_dependencies()
+    request: DockerHostCreate = _docker_request()
+    crud.get_keypair.return_value = None
+
+    # Act
+    with pytest.raises(
+        HostKeypairNotFoundError,
+        match=f"keypair {_KEYPAIR_ID} not found",
+    ) as captured:
+        await service.create(request)
+
+    # Assert
+    assert captured.value.provider is HostType.DOCKER
+    crud.create_host.assert_not_awaited()
     session.commit.assert_not_awaited()
     session.rollback.assert_awaited_once_with()
 

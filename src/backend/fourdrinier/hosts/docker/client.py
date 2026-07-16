@@ -3,7 +3,7 @@
 docker-py's ``SSHHTTPAdapter`` only reads ``~/.ssh/config`` and the agent for
 credentials (docker/docker-py#2416), so this module subclasses it to inject a
 paramiko ``PKey`` directly — the private key never touches disk — and to
-control host-key verification (trust-on-first-use, see ``service.py``).
+control host-key verification (trust-on-first-use, see ``operations/ping.py``).
 
 This rides on docker-py internals (``_create_paramiko_client``/``ssh_params``
 and the ``http+docker://ssh`` mount in ``APIClient``); the dependency is pinned
