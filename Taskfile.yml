@@ -9,11 +9,11 @@ includes:
 
 tasks:
   debug:
-    desc: Run the backend in debug mode (Docker Compose)
+    desc: Run the backend and frontend in debug mode (Docker Compose)
     cmds:
       - docker compose --profile debug up
 
   debug:build:
-    desc: Rebuild the debug image and run — use after Dockerfile changes or when the container environment is stale
+    desc: Rebuild the debug images and run — use after Dockerfile changes or when the container environment is stale
     cmds:
       - docker compose --profile debug up --build
