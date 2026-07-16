@@ -25,14 +25,6 @@ class HostKeypairNotFoundError(HostError):
     """The SSH keypair selected for a Docker host does not exist."""
 
 
-class HostProviderMismatchError(HostError):
-    """Host details or a driver do not match the host provider type."""
-
-
-class HostDriverNotRegisteredError(HostError):
-    """No host driver is registered for the requested provider type."""
-
-
 class HostDriverUnavailableError(HostError):
     """The selected host driver cannot currently perform the operation."""
 
@@ -63,7 +55,6 @@ class HostInvalidRemoteStateError(HostRemoteError):
 
 __all__ = [
     "HostAuthenticationError",
-    "HostDriverNotRegisteredError",
     "HostDriverUnavailableError",
     "HostError",
     "HostInvalidRemoteStateError",
@@ -71,7 +62,6 @@ __all__ = [
     "HostNameConflictError",
     "HostNotFoundError",
     "HostPermissionDeniedError",
-    "HostProviderMismatchError",
     "HostRemoteError",
     "HostTrustVerificationError",
     "HostUnreachableError",

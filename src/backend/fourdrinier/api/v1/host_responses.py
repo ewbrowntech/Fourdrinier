@@ -6,8 +6,13 @@ Map host domain and persistence results to public API response schemas.
 
 from __future__ import annotations
 
+from typing import cast
+
 from fourdrinier.db.models import DockerHostDetails, Host, KubernetesHostDetails
-from fourdrinier.db.schemas import (
+from fourdrinier.hosts.docker import DockerHostPingResult
+from fourdrinier.hosts.drivers import HostDriverPingResult
+from fourdrinier.hosts.types import HostType
+from fourdrinier.schemas import (
     DockerHostRead,
     DockerPingResponse,
     HostPingResponse,
@@ -16,9 +21,6 @@ from fourdrinier.db.schemas import (
     KubernetesPingResponse,
     PingHostKey,
 )
-from fourdrinier.hosts import HostPingResult, HostProviderMismatchError, HostType
-from fourdrinier.hosts.docker import DockerHostPingResult
-from fourdrinier.hosts.kubernetes import KubernetesHostPingResult
 
 
 def host_response(host: Host) -> HostRead:
@@ -29,17 +31,9 @@ def host_response(host: Host) -> HostRead:
 
     Returns:
         A response without secret or bulky trust material.
-
-    Raises:
-        HostProviderMismatchError: If the aggregate lacks matching provider details.
     """
     if host.type is HostType.DOCKER:
-        details: DockerHostDetails | None = host.docker_details
-        if details is None:
-            raise HostProviderMismatchError(
-                f"Docker host {host.id} has no Docker details",
-                provider=HostType.DOCKER,
-            )
+        details: DockerHostDetails = cast(DockerHostDetails, host.docker_details)
         return DockerHostRead(
             id=host.id,
             name=host.name,
@@ -55,12 +49,10 @@ def host_response(host: Host) -> HostRead:
             host_key_fingerprint=details.host_key_fingerprint,
         )
 
-    kubernetes_details: KubernetesHostDetails | None = host.kubernetes_details
-    if kubernetes_details is None:
-        raise HostProviderMismatchError(
-            f"Kubernetes host {host.id} has no Kubernetes details",
-            provider=HostType.KUBERNETES,
-        )
+    kubernetes_details: KubernetesHostDetails = cast(
+        KubernetesHostDetails,
+        host.kubernetes_details,
+    )
     return KubernetesHostRead(
         id=host.id,
         name=host.name,
@@ -74,7 +66,7 @@ def host_response(host: Host) -> HostRead:
     )
 
 
-def ping_response(result: HostPingResult) -> HostPingResponse:
+def ping_response(result: HostDriverPingResult) -> HostPingResponse:
     """Build the provider-specific public representation of a ping result.
 
     Args:
@@ -82,9 +74,6 @@ def ping_response(result: HostPingResult) -> HostPingResponse:
 
     Returns:
         The matching provider ping response.
-
-    Raises:
-        HostProviderMismatchError: If the result type is not supported.
     """
     if isinstance(result, DockerHostPingResult):
         return DockerPingResponse(
@@ -99,17 +88,12 @@ def ping_response(result: HostPingResult) -> HostPingResponse:
                 first_seen=result.host_key.first_seen,
             ),
         )
-    if isinstance(result, KubernetesHostPingResult):
-        return KubernetesPingResponse(
-            latency_ms=result.latency_ms,
-            git_version=result.git_version,
-            platform=result.platform,
-            username=result.username,
-            namespace=result.namespace,
-        )
-    raise HostProviderMismatchError(
-        f"unsupported ping result {type(result).__name__}",
-        provider=result.type,
+    return KubernetesPingResponse(
+        latency_ms=result.latency_ms,
+        git_version=result.git_version,
+        platform=result.platform,
+        username=result.username,
+        namespace=result.namespace,
     )
 
 

@@ -1,5 +1,5 @@
 """
-test_docker_driver.py
+test_ping.py
 
 Unit tests for DockerHostDriver.ping.
 """
@@ -22,7 +22,6 @@ from fourdrinier.db.models import (
 )
 from fourdrinier.hosts import (
     HostAuthenticationError,
-    HostProviderMismatchError,
     HostTrustVerificationError,
     HostType,
     HostUnreachableError,
@@ -85,28 +84,6 @@ def _docker_host() -> Host:
     return host
 
 
-async def test_docker_host_driver_ping_001_anomalous_host_type_does_not_match() -> None:
-    """Test 001 - Anomalous
-    Condition: The Docker driver receives a Kubernetes host
-    Result: HostProviderMismatchError is raised before any remote operation
-    """
-    # Arrange
-    decryptor: Mock = Mock(spec=SecretDecryptor)
-    driver: DockerHostDriver = DockerHostDriver(cast(SecretDecryptor, decryptor))
-    host: Host = Host(type=HostType.KUBERNETES, name="production")
-
-    # Act
-    with pytest.raises(
-        HostProviderMismatchError,
-        match="the Docker driver cannot operate on a kubernetes host",
-    ) as captured:
-        await driver.ping(host)
-
-    # Assert
-    assert captured.value.provider is HostType.DOCKER
-    decryptor.decrypt.assert_not_called()
-
-
 async def test_docker_host_driver_ping_002_nominal_daemon_is_observed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -152,52 +129,6 @@ async def test_docker_host_driver_ping_002_nominal_daemon_is_observed(
         "private_key_pem": "private-key-pem",
         "known_host_key": None,
     }
-
-
-async def test_docker_host_driver_ping_003_anomalous_details_are_missing() -> None:
-    """Test 003 - Anomalous
-    Condition: A Docker host aggregate has no Docker details loaded
-    Result: HostProviderMismatchError identifies the malformed Docker aggregate
-    """
-    # Arrange
-    decryptor: Mock = Mock(spec=SecretDecryptor)
-    driver: DockerHostDriver = DockerHostDriver(cast(SecretDecryptor, decryptor))
-    host: Host = Host(id=_HOST_ID, type=HostType.DOCKER, name="production")
-
-    # Act
-    with pytest.raises(
-        HostProviderMismatchError,
-        match="the Docker host has no Docker details",
-    ) as captured:
-        await driver.ping(host)
-
-    # Assert
-    assert captured.value.provider is HostType.DOCKER
-    decryptor.decrypt.assert_not_called()
-
-
-async def test_docker_host_driver_ping_004_anomalous_keypair_is_missing() -> None:
-    """Test 004 - Anomalous
-    Condition: A Docker host aggregate has details without an SSH keypair
-    Result: HostProviderMismatchError identifies the incomplete Docker aggregate
-    """
-    # Arrange
-    decryptor: Mock = Mock(spec=SecretDecryptor)
-    driver: DockerHostDriver = DockerHostDriver(cast(SecretDecryptor, decryptor))
-    host: Host = _docker_host()
-    assert host.docker_details is not None
-    host.docker_details.keypair = None  # type: ignore[assignment]
-
-    # Act
-    with pytest.raises(
-        HostProviderMismatchError,
-        match="the Docker host has no SSH keypair",
-    ) as captured:
-        await driver.ping(host)
-
-    # Assert
-    assert captured.value.provider is HostType.DOCKER
-    decryptor.decrypt.assert_not_called()
 
 
 async def test_docker_host_driver_ping_005_anomalous_private_key_is_not_utf8() -> None:

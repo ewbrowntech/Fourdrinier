@@ -15,18 +15,18 @@ from fourdrinier.api.deps import HostServiceDep
 from fourdrinier.api.v1.host_responses import host_response, ping_response
 from fourdrinier.core.crypto import DecryptionError
 from fourdrinier.db.models import Host
-from fourdrinier.db.schemas import HostCreate, HostPingResponse, HostRead
 from fourdrinier.hosts import (
     HostAuthenticationError,
     HostKeypairNotFoundError,
     HostNameConflictError,
     HostNotFoundError,
     HostPermissionDeniedError,
-    HostPingResult,
     HostTrustVerificationError,
     HostType,
     HostUnreachableError,
 )
+from fourdrinier.hosts.drivers import HostDriverPingResult
+from fourdrinier.schemas import HostCreate, HostPingResponse, HostRead
 
 router: APIRouter = APIRouter(prefix="/hosts", tags=["hosts"])
 
@@ -82,7 +82,7 @@ async def delete_host(host_id: uuid.UUID, service: HostServiceDep) -> None:
 @router.post("/{host_id}/ping", response_model=HostPingResponse)
 async def ping_host(host_id: uuid.UUID, service: HostServiceDep) -> HostPingResponse:
     try:
-        result: HostPingResult = await service.ping(host_id)
+        result: HostDriverPingResult = await service.ping(host_id)
     except HostNotFoundError as exc:
         raise _not_found(exc) from exc
     except HostTrustVerificationError as exc:

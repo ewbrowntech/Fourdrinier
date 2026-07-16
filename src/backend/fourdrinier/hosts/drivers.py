@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from fourdrinier.hosts.errors import (
-    HostDriverNotRegisteredError,
-    HostProviderMismatchError,
-)
-from fourdrinier.hosts.types import HostPingResult, HostType
+from fourdrinier.hosts.docker.types import DockerHostPingResult
+from fourdrinier.hosts.kubernetes.types import KubernetesHostPingResult
+from fourdrinier.hosts.types import HostType
 
 if TYPE_CHECKING:
     from fourdrinier.db.models import Host
+
+type HostDriverPingResult = DockerHostPingResult | KubernetesHostPingResult
 
 
 @runtime_checkable
@@ -24,7 +24,7 @@ class HostDriver(Protocol):
 
     type: HostType
 
-    async def ping(self, host: Host) -> HostPingResult:
+    async def ping(self, host: Host) -> HostDriverPingResult:
         """Check connectivity to a registered host.
 
         Args:
@@ -48,24 +48,11 @@ class HostDriverRegistry:
         Args:
             docker: Driver whose declared provider is Docker.
             kubernetes: Driver whose declared provider is Kubernetes.
-
-        Raises:
-            HostProviderMismatchError: If a driver declares the wrong provider type.
         """
-        self._validate_driver(HostType.DOCKER, docker)
-        self._validate_driver(HostType.KUBERNETES, kubernetes)
         self._drivers: dict[HostType, HostDriver] = {
             HostType.DOCKER: docker,
             HostType.KUBERNETES: kubernetes,
         }
-
-    @staticmethod
-    def _validate_driver(expected_type: HostType, driver: HostDriver) -> None:
-        if driver.type is not expected_type:
-            raise HostProviderMismatchError(
-                f"expected a {expected_type.value} driver, got {driver.type.value}",
-                provider=expected_type,
-            )
 
     def for_host(self, host: Host) -> HostDriver:
         """Return the driver matching a host aggregate.
@@ -75,17 +62,9 @@ class HostDriverRegistry:
 
         Returns:
             The registered driver for the host provider.
-
-        Raises:
-            HostDriverNotRegisteredError: If no driver supports the host provider.
         """
-        try:
-            driver: HostDriver = self._drivers[host.type]
-        except KeyError as exc:
-            raise HostDriverNotRegisteredError(
-                f"no driver is registered for host provider {host.type!r}",
-            ) from exc
+        driver: HostDriver = self._drivers[host.type]
         return driver
 
 
-__all__: list[str] = ["HostDriver", "HostDriverRegistry"]
+__all__: list[str] = ["HostDriver", "HostDriverPingResult", "HostDriverRegistry"]

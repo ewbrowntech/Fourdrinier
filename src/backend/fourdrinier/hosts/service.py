@@ -18,15 +18,14 @@ from fourdrinier.db.models import (
     KubernetesHostDetails,
     SSHKeypair,
 )
-from fourdrinier.db.schemas.host import DockerHostCreate, HostCreate, KubernetesHostCreate
-from fourdrinier.hosts.drivers import HostDriver, HostDriverRegistry
+from fourdrinier.hosts.drivers import HostDriver, HostDriverPingResult, HostDriverRegistry
 from fourdrinier.hosts.errors import (
     HostKeypairNotFoundError,
     HostNameConflictError,
     HostNotFoundError,
-    HostProviderMismatchError,
 )
-from fourdrinier.hosts.types import HostId, HostPingResult, HostType
+from fourdrinier.hosts.types import HostId, HostType
+from fourdrinier.schemas.host import DockerHostCreate, HostCreate
 
 
 def _is_host_name_conflict(exc: IntegrityError) -> bool:
@@ -57,11 +56,6 @@ class HostService:
 
     def _build_host(self, request: HostCreate) -> Host:
         if isinstance(request, DockerHostCreate):
-            if request.type != HostType.DOCKER.value:
-                raise HostProviderMismatchError(
-                    "Docker host details must declare the docker provider",
-                    provider=HostType.DOCKER,
-                )
             docker_details: DockerHostDetails = DockerHostDetails(
                 address=request.address,
                 port=request.port,
@@ -77,33 +71,23 @@ class HostService:
             )
             return docker_host
 
-        if isinstance(request, KubernetesHostCreate):
-            if request.type != HostType.KUBERNETES.value:
-                raise HostProviderMismatchError(
-                    "Kubernetes host details must declare the kubernetes provider",
-                    provider=HostType.KUBERNETES,
-                )
-            token_encrypted: bytes = self._secret_encryptor.encrypt(
-                PlaintextSecret(request.token.encode())
-            )
-            kubernetes_details: KubernetesHostDetails = KubernetesHostDetails(
-                api_url=request.api_url,
-                ca_cert_pem=request.ca_cert_pem,
-                token_encrypted=token_encrypted,
-                namespace=request.namespace,
-            )
-            kubernetes_host: Host = Host(
-                type=HostType.KUBERNETES,
-                name=request.name,
-                enabled=request.enabled,
-                labels=request.labels,
-                kubernetes_details=kubernetes_details,
-            )
-            return kubernetes_host
-
-        raise HostProviderMismatchError(
-            f"unsupported host creation details {type(request).__name__}",
+        token_encrypted: bytes = self._secret_encryptor.encrypt(
+            PlaintextSecret(request.token.encode())
         )
+        kubernetes_details: KubernetesHostDetails = KubernetesHostDetails(
+            api_url=request.api_url,
+            ca_cert_pem=request.ca_cert_pem,
+            token_encrypted=token_encrypted,
+            namespace=request.namespace,
+        )
+        kubernetes_host: Host = Host(
+            type=HostType.KUBERNETES,
+            name=request.name,
+            enabled=request.enabled,
+            labels=request.labels,
+            kubernetes_details=kubernetes_details,
+        )
+        return kubernetes_host
 
     async def _get_required(self, host_id: HostId) -> Host:
         host: Host | None = await hosts_crud.get_host(self._session, host_id)
@@ -123,7 +107,6 @@ class HostService:
         Raises:
             HostKeypairNotFoundError: If a Docker host selects an unknown SSH keypair.
             HostNameConflictError: If the requested host name already exists.
-            HostProviderMismatchError: If details declare the wrong provider.
             SecretError: If provider credentials cannot be encrypted.
         """
         try:
@@ -197,7 +180,7 @@ class HostService:
             await self._session.rollback()
             raise
 
-    async def ping(self, host_id: HostId) -> HostPingResult:
+    async def ping(self, host_id: HostId) -> HostDriverPingResult:
         """Check a host through its provider and persist successful observation state.
 
         Args:
@@ -213,7 +196,7 @@ class HostService:
         try:
             host: Host = await self._get_required(host_id)
             driver: HostDriver = self._drivers.for_host(host)
-            result: HostPingResult = await driver.ping(host)
+            result: HostDriverPingResult = await driver.ping(host)
             host.last_seen_at = result.observed_at
             await self._session.commit()
         except Exception:

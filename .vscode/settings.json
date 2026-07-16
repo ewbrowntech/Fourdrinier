@@ -28,5 +28,12 @@
     "editor.defaultFormatter": "vscode.markdown-language-features"
   },
   "files.trimTrailingWhitespace": true,
-  "files.insertFinalNewline": true
+  "files.insertFinalNewline": true,
+  "python.testing.cwd": "${workspaceFolder}/src/backend",
+  "python.testing.pytestArgs": [
+    "tests",
+    "--cov=fourdrinier"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
 }

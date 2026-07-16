@@ -1,5 +1,5 @@
 """
-test_kubernetes_driver.py
+test_ping.py
 
 Unit tests for KubernetesHostDriver.ping.
 """
@@ -18,7 +18,6 @@ from fourdrinier.db.models import Host, KubernetesHostDetails
 from fourdrinier.hosts import (
     HostAuthenticationError,
     HostPermissionDeniedError,
-    HostProviderMismatchError,
     HostTrustVerificationError,
     HostType,
     HostUnreachableError,
@@ -52,28 +51,6 @@ def _kubernetes_host(*, token_encrypted: bytes = b"ciphertext") -> Host:
         ),
     )
     return host
-
-
-async def test_kubernetes_host_driver_ping_001_anomalous_host_type_does_not_match() -> None:
-    """Test 001 - Anomalous
-    Condition: The Kubernetes driver receives a Docker host
-    Result: HostProviderMismatchError is raised before any remote operation
-    """
-    # Arrange
-    decryptor: Mock = Mock(spec=SecretDecryptor)
-    driver: KubernetesHostDriver = KubernetesHostDriver(cast(SecretDecryptor, decryptor))
-    host: Host = Host(type=HostType.DOCKER, name="production")
-
-    # Act
-    with pytest.raises(
-        HostProviderMismatchError,
-        match="the Kubernetes driver cannot operate on a docker host",
-    ) as captured:
-        await driver.ping(host)
-
-    # Assert
-    assert captured.value.provider is HostType.KUBERNETES
-    decryptor.decrypt.assert_not_called()
 
 
 async def test_kubernetes_host_driver_ping_002_nominal_cluster_is_observed(
@@ -120,28 +97,6 @@ async def test_kubernetes_host_driver_ping_002_nominal_cluster_is_observed(
         ca_cert_pem="certificate",
         namespace="fourdrinier",
     )
-
-
-async def test_kubernetes_host_driver_ping_003_anomalous_details_are_missing() -> None:
-    """Test 003 - Anomalous
-    Condition: A Kubernetes host aggregate has no Kubernetes details loaded
-    Result: HostProviderMismatchError identifies the malformed Kubernetes aggregate
-    """
-    # Arrange
-    decryptor: Mock = Mock(spec=SecretDecryptor)
-    driver: KubernetesHostDriver = KubernetesHostDriver(cast(SecretDecryptor, decryptor))
-    host: Host = Host(id=_HOST_ID, type=HostType.KUBERNETES, name="production")
-
-    # Act
-    with pytest.raises(
-        HostProviderMismatchError,
-        match="the Kubernetes host has no Kubernetes details",
-    ) as captured:
-        await driver.ping(host)
-
-    # Assert
-    assert captured.value.provider is HostType.KUBERNETES
-    decryptor.decrypt.assert_not_called()
 
 
 async def test_kubernetes_host_driver_ping_004_anomalous_token_is_not_utf8() -> None:

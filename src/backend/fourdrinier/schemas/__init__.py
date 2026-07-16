@@ -1,6 +1,10 @@
-"""Pydantic schemas for DB-backed domain objects."""
+"""
+__init__.py
 
-from fourdrinier.db.schemas.host import (
+Export Pydantic request and response contracts.
+"""
+
+from fourdrinier.schemas.host import (
     DockerHostCreate,
     DockerHostRead,
     DockerPingResponse,
@@ -17,9 +21,9 @@ from fourdrinier.db.schemas.host import (
     PingHostKey,
     PingResponse,
 )
-from fourdrinier.db.schemas.ssh_keypair import KeypairCreate, KeypairRead
+from fourdrinier.schemas.ssh_keypair import KeypairCreate, KeypairRead
 
-__all__ = [
+__all__: list[str] = [
     "DockerHostCreate",
     "DockerHostRead",
     "DockerPingResponse",

@@ -10,7 +10,7 @@ import ssl
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import httpx
 
@@ -19,7 +19,6 @@ from fourdrinier.db.models import Host, KubernetesHostDetails
 from fourdrinier.hosts.errors import (
     HostAuthenticationError,
     HostPermissionDeniedError,
-    HostProviderMismatchError,
     HostTrustVerificationError,
     HostUnreachableError,
 )
@@ -180,24 +179,13 @@ async def ping(host: Host, secret_decryptor: SecretDecryptor) -> KubernetesHostP
         Shared and Kubernetes-specific observations from the cluster.
 
     Raises:
-        HostProviderMismatchError: If the host is not a Kubernetes host.
         SecretError: If the stored bearer token cannot be decrypted.
         HostAuthenticationError: If the cluster rejects the bearer token.
         HostPermissionDeniedError: If the token lacks required permissions.
         HostTrustVerificationError: If TLS identity verification fails.
         HostUnreachableError: If the cluster cannot be reached or returns invalid data.
     """
-    if host.type is not HostType.KUBERNETES:
-        raise HostProviderMismatchError(
-            f"the Kubernetes driver cannot operate on a {host.type.value} host",
-            provider=HostType.KUBERNETES,
-        )
-    details: KubernetesHostDetails | None = host.kubernetes_details
-    if details is None:
-        raise HostProviderMismatchError(
-            "the Kubernetes host has no Kubernetes details",
-            provider=HostType.KUBERNETES,
-        )
+    details: KubernetesHostDetails = cast(KubernetesHostDetails, host.kubernetes_details)
 
     token_bytes: bytes = secret_decryptor.decrypt(EncryptedSecret(details.token_encrypted))
     try:

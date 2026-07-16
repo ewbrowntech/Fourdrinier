@@ -130,7 +130,7 @@ local code over indirection that merely saves lines.
 - Keep FastAPI-specific types such as `HTTPException`, `Request`, and
   `Depends` out of CRUD modules and host service modules. Those layers expose
   typed results and domain/transport errors; the API layer owns HTTP mapping.
-- Define request and response contracts in `fourdrinier/db/schemas/`. Validate
+- Define Pydantic request and response contracts in `fourdrinier/schemas/`. Validate
   untrusted input at that boundary, and use explicit Pydantic response models.
 
 ## Persistence and Migrations
@@ -138,9 +138,10 @@ local code over indirection that merely saves lines.
 - Use SQLAlchemy's async APIs and the request-scoped `AsyncSession` dependency.
   Keep queries and persistence operations in `fourdrinier/db/crud/`, not in
   routes or transport clients.
-- Preserve database invariants in the schema: use constraints, foreign keys,
-  server defaults, and indexes when the invariant must hold regardless of the
-  caller. Do not rely on application code alone for referential integrity.
+- Preserve database invariants in SQLAlchemy models and Alembic migrations: use
+  constraints, foreign keys, server defaults, and indexes when the invariant
+  must hold regardless of the caller. Do not rely on application code alone for
+  referential integrity.
 
 ## Evolving This Standard
 

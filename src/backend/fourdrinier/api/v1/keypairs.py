@@ -13,13 +13,13 @@ from fourdrinier.db.crud import ssh_keypairs as keypairs_crud
 from fourdrinier.db.crud.ssh_keypairs import KeypairInUseError
 from fourdrinier.db.deps import DbSession
 from fourdrinier.db.models import KeypairSource, SSHKeypair
-from fourdrinier.db.schemas import KeypairCreate, KeypairRead
 from fourdrinier.hosts.ssh.keys import (
     KeypairMaterial,
     PrivateKeyError,
     generate_keypair,
     import_private_key,
 )
+from fourdrinier.schemas import KeypairCreate, KeypairRead
 
 router: APIRouter = APIRouter(prefix="/keypairs", tags=["keypairs"])
 

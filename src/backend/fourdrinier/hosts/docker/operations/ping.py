@@ -10,6 +10,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
+from typing import cast
 
 import docker
 import paramiko
@@ -27,7 +28,6 @@ from fourdrinier.hosts.docker.errors import (
 from fourdrinier.hosts.docker.types import DockerHostPingResult, ObservedHostKey
 from fourdrinier.hosts.errors import (
     HostAuthenticationError,
-    HostProviderMismatchError,
     HostTrustVerificationError,
     HostUnreachableError,
 )
@@ -157,29 +157,13 @@ async def ping(host: Host, secret_decryptor: SecretDecryptor) -> DockerHostPingR
         Shared and Docker-specific observations from the remote daemon.
 
     Raises:
-        HostProviderMismatchError: If the host is not a complete Docker aggregate.
         SecretError: If the stored private key cannot be decrypted.
         HostAuthenticationError: If SSH rejects the configured private key.
         HostTrustVerificationError: If SSH host-key verification fails.
         HostUnreachableError: If SSH or the Docker daemon cannot be reached.
     """
-    if host.type is not HostType.DOCKER:
-        raise HostProviderMismatchError(
-            f"the Docker driver cannot operate on a {host.type.value} host",
-            provider=HostType.DOCKER,
-        )
-    details: DockerHostDetails | None = host.docker_details
-    if details is None:
-        raise HostProviderMismatchError(
-            "the Docker host has no Docker details",
-            provider=HostType.DOCKER,
-        )
-    keypair: SSHKeypair | None = details.keypair
-    if keypair is None:
-        raise HostProviderMismatchError(
-            "the Docker host has no SSH keypair",
-            provider=HostType.DOCKER,
-        )
+    details: DockerHostDetails = cast(DockerHostDetails, host.docker_details)
+    keypair: SSHKeypair = details.keypair
 
     private_key_bytes: bytes = secret_decryptor.decrypt(
         EncryptedSecret(keypair.private_key_encrypted)

@@ -1,4 +1,8 @@
-"""Pydantic schemas for SSH keypair payloads. Private keys are never emitted."""
+"""
+ssh_keypair.py
+
+Define Pydantic request and response contracts for SSH keypairs.
+"""
 
 from __future__ import annotations
 
@@ -39,4 +43,4 @@ class KeypairRead(BaseModel):
     updated_at: datetime
 
 
-__all__ = ["KeypairCreate", "KeypairRead"]
+__all__: list[str] = ["KeypairCreate", "KeypairRead"]

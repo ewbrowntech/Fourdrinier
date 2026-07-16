@@ -1,13 +1,11 @@
 """
 __init__.py
 
-Expose the provider-neutral host domain and driver boundary.
+Expose the provider-neutral host domain vocabulary.
 """
 
-from fourdrinier.hosts.drivers import HostDriver, HostDriverRegistry
 from fourdrinier.hosts.errors import (
     HostAuthenticationError,
-    HostDriverNotRegisteredError,
     HostDriverUnavailableError,
     HostError,
     HostInvalidRemoteStateError,
@@ -15,7 +13,6 @@ from fourdrinier.hosts.errors import (
     HostNameConflictError,
     HostNotFoundError,
     HostPermissionDeniedError,
-    HostProviderMismatchError,
     HostRemoteError,
     HostTrustVerificationError,
     HostUnreachableError,
@@ -30,9 +27,6 @@ from fourdrinier.hosts.types import (
 
 __all__ = [
     "HostAuthenticationError",
-    "HostDriver",
-    "HostDriverNotRegisteredError",
-    "HostDriverRegistry",
     "HostDriverUnavailableError",
     "HostError",
     "HostId",
@@ -42,7 +36,6 @@ __all__ = [
     "HostNotFoundError",
     "HostPermissionDeniedError",
     "HostPingResult",
-    "HostProviderMismatchError",
     "HostRemoteError",
     "HostTrustVerificationError",
     "HostType",

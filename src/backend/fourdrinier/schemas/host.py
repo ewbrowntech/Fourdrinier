@@ -1,7 +1,7 @@
 """
 host.py
 
-Define request and response contracts for Docker and Kubernetes hosts.
+Define Pydantic request and response contracts for Docker and Kubernetes hosts.
 """
 
 from __future__ import annotations

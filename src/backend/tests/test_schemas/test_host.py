@@ -1,4 +1,8 @@
-"""Unit tests for fourdrinier.db.schemas.host host API contracts."""
+"""
+test_host.py
+
+Unit tests for host Pydantic contracts.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import NameOID
 from pydantic import TypeAdapter, ValidationError
 
-from fourdrinier.db.schemas.host import (
+from fourdrinier.schemas.host import (
     DockerHostCreate,
     DockerHostRead,
     DockerPingResponse,
