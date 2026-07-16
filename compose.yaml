@@ -16,3 +16,20 @@ services:
       - ./src/backend/fourdrinier:/app/backend/fourdrinier
       - ./src/backend/pyproject.toml:/app/backend/pyproject.toml
       - ./src/backend/uv.lock:/app/backend/uv.lock
+
+  frontend:
+    profiles: [debug]
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+      target: frontend-debug
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
+    environment:
+      BACKEND_URL: http://backend:8000
+    volumes:
+      - ./src/frontend:/app/frontend
+      # Keep the container's node_modules; don't shadow it with the host's
+      - /app/frontend/node_modules
+    depends_on:
+      - backend
