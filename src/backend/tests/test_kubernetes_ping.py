@@ -17,7 +17,7 @@ from fourdrinier.hosts.kubernetes.errors import (
     TLSVerificationError,
 )
 from fourdrinier.hosts.kubernetes.operations import ping as kubernetes_ping
-from tests.test_api_hosts_kubernetes import CA_PEM
+from tests.test_api.test_hosts.support import CA_PEM
 
 API_URL = "https://203.0.113.20:6443"
 USERNAME = "system:serviceaccount:fourdrinier:fourdrinier"
