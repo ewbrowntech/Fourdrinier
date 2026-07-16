@@ -1,5 +1,7 @@
 # Host Implementation Order
 
+Status: Steps 1–11 complete. Server semantics and operations remain pending.
+
 Implement the host architecture dependency-first, followed by thin vertical
 slices. AI can generate the structural code early, while CRUD persistence,
 services, provider behavior, and consistency decisions remain manually owned
@@ -55,7 +57,6 @@ Start with persistence-only operations:
 
 - create the parent and matching details atomically
 - get by ID
-- get by name
 - list and filter by type
 - delete
 - eagerly load the matching details record
@@ -105,7 +106,7 @@ Add Kubernetes through the same boundaries. If this requires changes to the
 endpoint or application service, check whether provider-specific behavior has
 leaked outside the driver boundary before continuing.
 
-## 10. Replace or simplify the `/hosts` endpoints
+## 10. Replace or simplify the `/hosts` endpoints — Complete
 
 Keep routes limited to:
 
@@ -114,7 +115,7 @@ Keep routes limited to:
 - mapping domain errors to HTTP responses
 - returning read schemas
 
-## 11. Remove the old host persistence paths
+## 11. Remove the old host persistence paths — Complete
 
 After the replacement flow is tested, remove:
 

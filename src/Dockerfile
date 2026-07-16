@@ -109,4 +109,4 @@ COPY frontend/ ./
 
 EXPOSE 5173
 
-CMD ["sh", "-c", "pnpm install && exec pnpm dev"]
+CMD ["sh", "-c", "pnpm install --config.confirm-modules-purge=false && exec pnpm dev"]

@@ -9,11 +9,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      // Strip the /api prefix so /api/health reaches the backend's /health
+      // The backend serves its routes under /api/v1, so pass paths through unchanged
       '/api': {
         target: process.env.BACKEND_URL ?? 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
   },
