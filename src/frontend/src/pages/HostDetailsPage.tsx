@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { api } from '../api'
 import type { HostRead, KeypairRead } from '../api'
+import ConfirmDialog from '../components/ConfirmDialog'
 import Lamp from '../components/Lamp'
 import EditHostForm from '../components/EditHostForm'
 import { PencilIcon, RefreshIcon, TrashIcon } from '../components/icons'
@@ -53,15 +54,6 @@ function HostDetailsPage({ hostId }: HostDetailsPageProps) {
   useEffect(() => {
     void loadHost()
   }, [loadHost])
-
-  useEffect(() => {
-    if (!confirmRemove) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !removing) setConfirmRemove(false)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [confirmRemove, removing])
 
   async function handlePing() {
     if (!host) return
@@ -302,42 +294,19 @@ function HostDetailsPage({ hostId }: HostDetailsPageProps) {
       )}
 
       {confirmRemove && (
-        <div
-          className="modal-overlay"
-          role="presentation"
-          onClick={() => {
+        <ConfirmDialog
+          title={`Remove ${host.name}?`}
+          confirmLabel="Remove host"
+          confirmingLabel="Removing…"
+          confirming={removing}
+          danger
+          onConfirm={() => void handleDelete()}
+          onCancel={() => {
             if (!removing) setConfirmRemove(false)
           }}
         >
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="remove-host-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="remove-host-title">Remove {host.name}?</h2>
-            <p>Fourdrinier will forget this host. This cannot be undone.</p>
-            <div className="form-actions">
-              <button
-                type="button"
-                className="btn danger"
-                onClick={() => void handleDelete()}
-                disabled={removing}
-              >
-                {removing ? 'Removing…' : 'Remove host'}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setConfirmRemove(false)}
-                disabled={removing}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+          <p>Fourdrinier will forget this host. This cannot be undone.</p>
+        </ConfirmDialog>
       )}
     </>
   )

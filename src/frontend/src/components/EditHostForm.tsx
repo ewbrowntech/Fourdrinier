@@ -95,24 +95,26 @@ function EditHostForm({ host, keypairs, onUpdated, onCancel }: EditHostFormProps
       <div className="panel-head">
         <h2>Edit {host.name}</h2>
         <div className="segmented" role="radiogroup" aria-label="Enabled">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={enabled}
-            className={enabled ? 'on' : ''}
-            onClick={() => setEnabled(true)}
-          >
+          <label className={enabled ? 'on' : undefined}>
+            <input
+              type="radio"
+              name="host-enabled"
+              value="enabled"
+              checked={enabled}
+              onChange={() => setEnabled(true)}
+            />
             Enabled
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={!enabled}
-            className={!enabled ? 'on' : ''}
-            onClick={() => setEnabled(false)}
-          >
+          </label>
+          <label className={!enabled ? 'on' : undefined}>
+            <input
+              type="radio"
+              name="host-enabled"
+              value="disabled"
+              checked={!enabled}
+              onChange={() => setEnabled(false)}
+            />
             Disabled
-          </button>
+          </label>
         </div>
       </div>
 

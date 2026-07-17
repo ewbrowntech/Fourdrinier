@@ -8,6 +8,9 @@ export const Route = createRootRoute({
 function RootLayout() {
   return (
     <>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <header className="appbar">
         <Link className="brand" to="/hosts">
           <svg className="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -36,7 +39,7 @@ function RootLayout() {
           </Link>
         </nav>
       </header>
-      <main className="board">
+      <main id="main-content" className="board" tabIndex={-1}>
         <Outlet />
       </main>
       <TanStackRouterDevtools position="bottom-right" />

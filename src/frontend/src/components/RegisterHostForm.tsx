@@ -77,24 +77,26 @@ function RegisterHostForm({ keypairs, onCreated, onCancel }: RegisterHostFormPro
       <div className="panel-head">
         <h2>Register a host</h2>
         <div className="segmented" role="radiogroup" aria-label="Host type">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={kind === 'docker'}
-            className={kind === 'docker' ? 'on' : ''}
-            onClick={() => setKind('docker')}
-          >
+          <label className={kind === 'docker' ? 'on' : undefined}>
+            <input
+              type="radio"
+              name="host-type"
+              value="docker"
+              checked={kind === 'docker'}
+              onChange={() => setKind('docker')}
+            />
             Docker over SSH
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={kind === 'kubernetes'}
-            className={kind === 'kubernetes' ? 'on' : ''}
-            onClick={() => setKind('kubernetes')}
-          >
+          </label>
+          <label className={kind === 'kubernetes' ? 'on' : undefined}>
+            <input
+              type="radio"
+              name="host-type"
+              value="kubernetes"
+              checked={kind === 'kubernetes'}
+              onChange={() => setKind('kubernetes')}
+            />
             Kubernetes cluster
-          </button>
+          </label>
         </div>
       </div>
 

@@ -129,6 +129,32 @@ code {
   border-radius: 3px;
 }
 
+.skip-link {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  padding: 0.55rem 0.95rem;
+  background: var(--brand);
+  color: var(--brand-contrast);
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 0.15s;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+  outline: 2px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+
+.board:focus {
+  outline: none;
+}
+
 /* ---- App bar ----------------------------------------------------------- */
 
 .appbar {
@@ -225,6 +251,11 @@ code {
 .appbar nav a.active {
   color: var(--brand);
   background: var(--brand-tint);
+}
+
+.appbar nav a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 /* ---- Board layout ------------------------------------------------------ */
@@ -358,9 +389,15 @@ a.host-row {
   color: inherit;
 }
 
-.host-row:hover {
+.host-row:hover,
+a.host-row:focus-visible {
   border-color: var(--line-strong);
   box-shadow: var(--shadow-lift);
+}
+
+a.host-row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .host-chevron {
@@ -561,7 +598,10 @@ a.host-row {
   border-radius: 999px;
 }
 
-.segmented button {
+.segmented label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-ui);
   font-weight: 600;
   font-size: 0.8rem;
@@ -574,14 +614,31 @@ a.host-row {
   transition: background 0.15s, color 0.15s;
 }
 
-.segmented button:hover {
+.segmented label:hover {
   color: var(--ink);
 }
 
-.segmented button.on {
+.segmented label.on {
   background: var(--surface);
   color: var(--brand);
   box-shadow: var(--shadow);
+}
+
+.segmented input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.segmented label:has(input:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .field-grid {
@@ -827,6 +884,13 @@ a.host-row {
   background: var(--surface-2);
 }
 
+.icon-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  color: var(--brand);
+  border-color: var(--muted);
+}
+
 .icon-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -947,6 +1011,11 @@ a.host-row {
 
 .modal .form-actions {
   margin-top: 1.4rem;
+}
+
+/* Cancel is first in the DOM (initial focus / Tab order); Confirm stays on the left visually. */
+.modal .form-actions .btn:last-child {
+  order: -1;
 }
 
 /* ---- Responsive & motion ----------------------------------------------- */
