@@ -19,11 +19,15 @@ function App() {
 
   return (
     <>
-      <header className="control-bar">
+      <header className="appbar">
         <a className="brand" href="#/hosts">
-          <span className="brand-lamp" aria-hidden="true" />
+          <svg className="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="var(--brand-tint)" stroke="var(--brand)" strokeWidth="1.5" />
+            <path d="M5 9h14M5 12h14M5 15h14" stroke="var(--brand)" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M9 5v14M12 5v14M15 5v14" stroke="var(--brand)" strokeWidth="1.5" strokeLinecap="round" opacity="0.35" />
+          </svg>
           <span className="brand-text">
-            Fourdrinier
+            <span className="brand-name">Fourdrinier</span>
             <span className="brand-sub">Server mill</span>
           </span>
         </a>

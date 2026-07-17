@@ -73,8 +73,8 @@ function RegisterHostForm({ keypairs, onCreated, onCancel }: RegisterHostFormPro
   }
 
   return (
-    <form className="register-panel" onSubmit={handleSubmit}>
-      <div className="register-head">
+    <form className="panel" onSubmit={handleSubmit}>
+      <div className="panel-head">
         <h2>Register a host</h2>
         <div className="segmented" role="radiogroup" aria-label="Host type">
           <button

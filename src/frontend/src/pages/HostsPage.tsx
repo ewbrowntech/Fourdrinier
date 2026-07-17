@@ -39,6 +39,20 @@ function lampState(host: HostRead, ping: PingUI | undefined): LampState {
   return 'off'
 }
 
+const STATUS_LABELS: Record<LampState, string> = {
+  testing: 'Testing',
+  fault: 'Fault',
+  ok: 'Verified',
+  off: 'Not tested',
+}
+
+const STATUS_PILL_CLASS: Record<LampState, string> = {
+  testing: 'testing',
+  fault: 'fault',
+  ok: 'ok',
+  off: '',
+}
+
 function HostsPage() {
   const [hosts, setHosts] = useState<HostRead[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -113,20 +127,18 @@ function HostsPage() {
   return (
     <>
       <div className="page-head">
-        <h1>Hosts</h1>
+        <h1>
+          Hosts
+          {hosts !== null && hosts.length > 0 && (
+            <span className="count">{hosts.length}</span>
+          )}
+        </h1>
         {!formOpen && (
           <button type="button" className="btn primary" onClick={() => void openForm()}>
             Register host
           </button>
         )}
       </div>
-      {hosts !== null && hosts.length > 0 && (
-        <p className="legend" aria-hidden="true">
-          <span className="lamp ok static" /> verified
-          <span className="lamp off static" /> not tested
-          <span className="lamp fault static" /> fault
-        </p>
-      )}
 
       {formOpen && (
         <RegisterHostForm
@@ -137,7 +149,7 @@ function HostsPage() {
       )}
 
       {notice && (
-        <aside className="keypair-notice">
+        <aside className="notice">
           <h2>Install the new key on {notice.hostName}</h2>
           <p>
             Fourdrinier generated the keypair <strong>{notice.keypair.name}</strong>. Append this
@@ -152,7 +164,7 @@ function HostsPage() {
             <button type="button" className="btn" onClick={() => void copyPublicKey(notice.keypair.public_key)}>
               {copied ? 'Copied' : 'Copy public key'}
             </button>
-            <button type="button" className="btn quiet" onClick={() => setNotice(null)}>
+            <button type="button" className="btn ghost" onClick={() => setNotice(null)}>
               Done
             </button>
           </div>
@@ -166,11 +178,17 @@ function HostsPage() {
       )}
 
       {hosts !== null && hosts.length === 0 && !formOpen && (
-        <div className="empty-panel">
-          <h2>No hosts on the board</h2>
+        <div className="empty">
+          <svg className="empty-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="7" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <rect x="2" y="13" width="20" height="7" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <circle cx="6" cy="7.5" r="1" fill="currentColor" />
+            <circle cx="6" cy="16.5" r="1" fill="currentColor" />
+          </svg>
+          <h2>No hosts yet</h2>
           <p>
-            A host is a machine Fourdrinier can run Minecraft servers on — a box reachable over
-            SSH with Docker, or a Kubernetes cluster.
+            A host is a machine Fourdrinier runs Minecraft servers on — a box reachable over SSH
+            with Docker, or a Kubernetes cluster.
           </p>
           <button type="button" className="btn primary" onClick={() => void openForm()}>
             Register your first host
@@ -180,23 +198,25 @@ function HostsPage() {
 
       {hosts !== null && hosts.length > 0 && (
         <ul className="host-board">
-          {hosts.map((host, index) => {
+          {hosts.map((host) => {
             const ping = pings[host.id]
+            const state = lampState(host, ping)
             return (
               <li key={host.id} className="host-row">
-                <Lamp state={lampState(host, ping)} delayMs={index * 90} />
-                <div className="host-id">
-                  <span className="host-name">
-                    {host.name}
-                    <span className="type-tag">{host.type === 'docker' ? 'Docker' : 'Kubernetes'}</span>
-                  </span>
-                  <span className="host-endpoint">{hostEndpoint(host)}</span>
+                <Lamp state={state} />
+                <div className="host-main">
+                  <span className="host-name">{host.name}</span>
+                  <span className="type-tag">{host.type === 'docker' ? 'Docker' : 'Kubernetes'}</span>
                 </div>
                 <div className="host-status">
-                  {ping?.phase === 'ok' && <span className="ping-ok">{ping.summary}</span>}
-                  {ping?.phase === 'fail' && <span className="ping-fail">{ping.message}</span>}
+                  <span className={`pill ${STATUS_PILL_CLASS[state]}`}>{STATUS_LABELS[state]}</span>
+                </div>
+                <div className="host-meta">
+                  <span className="host-endpoint">{hostEndpoint(host)}</span>
+                  {ping?.phase === 'ok' && <span className="host-detail ok">{ping.summary}</span>}
+                  {ping?.phase === 'fail' && <span className="host-detail fault">{ping.message}</span>}
                   {!ping && host.last_seen_at !== null && (
-                    <span className="ping-idle">
+                    <span className="host-detail idle">
                       last seen {new Date(host.last_seen_at).toLocaleString()}
                     </span>
                   )}
@@ -210,7 +230,7 @@ function HostsPage() {
                   >
                     {ping?.phase === 'testing' ? 'Testing…' : 'Test connection'}
                   </button>
-                  <button type="button" className="btn small quiet" onClick={() => void handleDelete(host)}>
+                  <button type="button" className="btn small ghost" onClick={() => void handleDelete(host)}>
                     Remove
                   </button>
                 </div>

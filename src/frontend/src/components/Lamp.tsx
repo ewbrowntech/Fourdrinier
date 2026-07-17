@@ -9,14 +9,12 @@ const LAMP_TITLES: Record<LampState, string> = {
 
 interface LampProps {
   state: LampState
-  delayMs?: number
 }
 
-function Lamp({ state, delayMs }: LampProps) {
+function Lamp({ state }: LampProps) {
   return (
     <span
-      className={`lamp ${state}`}
-      style={delayMs !== undefined ? { animationDelay: `${delayMs}ms` } : undefined}
+      className={`dot ${state}`}
       role="img"
       aria-label={LAMP_TITLES[state]}
       title={LAMP_TITLES[state]}
