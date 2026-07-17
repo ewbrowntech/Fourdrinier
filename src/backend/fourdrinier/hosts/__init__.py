@@ -15,6 +15,7 @@ from fourdrinier.hosts.errors import (
     HostPermissionDeniedError,
     HostRemoteError,
     HostTrustVerificationError,
+    HostTypeChangeError,
     HostUnreachableError,
 )
 from fourdrinier.hosts.types import (
@@ -39,6 +40,7 @@ __all__ = [
     "HostRemoteError",
     "HostTrustVerificationError",
     "HostType",
+    "HostTypeChangeError",
     "HostUnreachableError",
     "SSHKeypairId",
     "Timestamp",

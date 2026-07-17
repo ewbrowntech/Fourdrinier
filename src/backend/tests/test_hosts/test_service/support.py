@@ -15,12 +15,15 @@ from unittest.mock import AsyncMock, Mock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fourdrinier.core.secrets import SecretEncryptor
-from fourdrinier.db.models import Host
+from fourdrinier.db.models import DockerHostDetails, Host, KubernetesHostDetails
 from fourdrinier.hosts import HostType
 from fourdrinier.hosts.docker.types import DockerHostPingResult, ObservedHostKey
 from fourdrinier.hosts.drivers import HostDriverRegistry
 from fourdrinier.hosts.service import HostService
-from fourdrinier.schemas.host import DockerHostCreate, KubernetesHostCreate
+from fourdrinier.schemas.host import (
+    DockerHostCreate,
+    KubernetesHostCreate,
+)
 from tests.test_api.test_hosts.support import CA_PEM
 
 HOST_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000101")
@@ -37,6 +40,7 @@ class CrudMocks:
     get_host: AsyncMock
     get_keypair: AsyncMock
     list_hosts: AsyncMock
+    update_host: AsyncMock
 
 
 def service_dependencies() -> tuple[HostService, AsyncMock, Mock, Mock]:
@@ -104,6 +108,20 @@ def host(host_type: HostType = HostType.DOCKER) -> Host:
         A host aggregate with a stable identifier.
     """
     persisted: Host = Host(id=HOST_ID, type=host_type, name="production")
+    if host_type is HostType.DOCKER:
+        persisted.docker_details = DockerHostDetails(
+            address="203.0.113.1",
+            port=22,
+            username="root",
+            keypair_id=KEYPAIR_ID,
+        )
+    else:
+        persisted.kubernetes_details = KubernetesHostDetails(
+            api_url="https://203.0.113.2:6443",
+            ca_cert_pem=CA_PEM,
+            token_encrypted=b"old-token",
+            namespace="default",
+        )
     return persisted
 
 

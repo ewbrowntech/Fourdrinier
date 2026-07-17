@@ -158,6 +158,7 @@ Hosts remain one collection:
 | `POST` | `/hosts` | Create a Docker or Kubernetes host |
 | `GET` | `/hosts` | List hosts, optionally filtered by type |
 | `GET` | `/hosts/{host_id}` | Read any host |
+| `PATCH` | `/hosts/{host_id}` | Modify common, provider, or credential fields |
 | `DELETE` | `/hosts/{host_id}` | Delete the parent and its details |
 | `POST` | `/hosts/{host_id}/ping` | Check the selected provider end to end |
 
@@ -202,6 +203,13 @@ A missing or unknown type, missing provider fields, or fields belonging to the
 wrong provider produce `422 Unprocessable Entity`. Forbidding extra fields is
 important because it prevents a mistyped provider payload from being silently
 accepted after irrelevant fields are discarded.
+
+`PATCH /hosts/{host_id}` uses the same required provider discriminator while
+making every other field optional. The discriminator must match the persisted
+host because provider type is immutable. Docker credentials are changed by
+supplying a new `keypair_id`; Kubernetes credentials are changed by supplying
+a new `token`, which is encrypted before persistence. Credential and CA fields
+remain omitted from responses.
 
 Requests and responses remain flat. For example:
 

@@ -6,6 +6,8 @@ Coordinate provider-neutral host persistence and remote operations.
 
 from __future__ import annotations
 
+from typing import cast
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,9 +25,17 @@ from fourdrinier.hosts.errors import (
     HostKeypairNotFoundError,
     HostNameConflictError,
     HostNotFoundError,
+    HostTypeChangeError,
 )
-from fourdrinier.hosts.types import HostId, HostType
-from fourdrinier.schemas.host import DockerHostCreate, HostCreate
+from fourdrinier.hosts.types import HostId, HostType, SSHKeypairId
+from fourdrinier.schemas.host import (
+    DockerHostCreate,
+    DockerHostUpdate,
+    HostCreate,
+    HostUpdate,
+    HostUpdateBase,
+    KubernetesHostUpdate,
+)
 
 
 def _is_host_name_conflict(exc: IntegrityError) -> bool:
@@ -95,6 +105,62 @@ class HostService:
             raise HostNotFoundError(f"host {host_id} not found")
         return host
 
+    def _apply_common_updates(self, host: Host, request: HostUpdateBase) -> None:
+        fields: set[str] = request.model_fields_set
+        if "name" in fields:
+            host.name = cast(str, request.name)
+        if "enabled" in fields:
+            host.enabled = cast(bool, request.enabled)
+        if "labels" in fields:
+            host.labels = cast(dict[str, str], request.labels)
+
+    async def _apply_docker_updates(
+        self,
+        host: Host,
+        request: DockerHostUpdate,
+    ) -> None:
+        details: DockerHostDetails = cast(DockerHostDetails, host.docker_details)
+        fields: set[str] = request.model_fields_set
+        if "keypair_id" in fields:
+            keypair_id: SSHKeypairId = cast(SSHKeypairId, request.keypair_id)
+            keypair: SSHKeypair | None = await keypairs_crud.get_keypair(
+                self._session,
+                keypair_id,
+            )
+            if keypair is None:
+                raise HostKeypairNotFoundError(
+                    f"keypair {keypair_id} not found",
+                    provider=HostType.DOCKER,
+                )
+            details.keypair_id = keypair_id
+        if "address" in fields:
+            details.address = cast(str, request.address)
+        if "port" in fields:
+            details.port = cast(int, request.port)
+        if "username" in fields:
+            details.username = cast(str, request.username)
+
+    def _apply_kubernetes_updates(
+        self,
+        host: Host,
+        request: KubernetesHostUpdate,
+    ) -> None:
+        details: KubernetesHostDetails = cast(
+            KubernetesHostDetails,
+            host.kubernetes_details,
+        )
+        fields: set[str] = request.model_fields_set
+        if "api_url" in fields:
+            details.api_url = cast(str, request.api_url)
+        if "ca_cert_pem" in fields:
+            details.ca_cert_pem = cast(str, request.ca_cert_pem)
+        if "token" in fields:
+            details.token_encrypted = self._secret_encryptor.encrypt(
+                PlaintextSecret(cast(str, request.token).encode())
+            )
+        if "namespace" in fields:
+            details.namespace = cast(str, request.namespace)
+
     async def create(self, request: HostCreate) -> Host:
         """Create a host and its matching provider details atomically.
 
@@ -162,6 +228,52 @@ class HostService:
         """
         hosts: list[Host] = await hosts_crud.list_hosts(self._session, host_type)
         return hosts
+
+    async def update(self, host_id: HostId, request: HostUpdate) -> Host:
+        """Apply a provider-specific partial update atomically.
+
+        Args:
+            host_id: Identifier of the host to modify.
+            request: Validated partial update selected by provider type.
+
+        Returns:
+            The updated host aggregate.
+
+        Raises:
+            HostNotFoundError: If the requested host does not exist.
+            HostTypeChangeError: If the request type differs from the persisted provider.
+            HostKeypairNotFoundError: If a Docker update selects an unknown SSH keypair.
+            HostNameConflictError: If the requested host name already exists.
+            SecretError: If a replacement provider credential cannot be encrypted.
+        """
+        try:
+            host: Host = await self._get_required(host_id)
+            request_type: HostType = HostType(request.type)
+            if host.type is not request_type:
+                raise HostTypeChangeError(
+                    f"host {host_id} has type {host.type.value}; type cannot be changed to "
+                    f"{request_type.value}",
+                    provider=host.type,
+                )
+            self._apply_common_updates(host, request)
+            if isinstance(request, DockerHostUpdate):
+                await self._apply_docker_updates(host, request)
+            else:
+                self._apply_kubernetes_updates(host, request)
+            updated: Host = await hosts_crud.update_host(self._session, host)
+            await self._session.commit()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            if _is_host_name_conflict(exc):
+                raise HostNameConflictError(
+                    f"host with name {request.name!r} already exists",
+                    provider=HostType(request.type),
+                ) from exc
+            raise
+        except Exception:
+            await self._session.rollback()
+            raise
+        return updated
 
     async def delete(self, host_id: HostId) -> None:
         """Delete a host and its owned provider details atomically.

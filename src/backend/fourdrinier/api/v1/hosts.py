@@ -23,10 +23,11 @@ from fourdrinier.hosts import (
     HostPermissionDeniedError,
     HostTrustVerificationError,
     HostType,
+    HostTypeChangeError,
     HostUnreachableError,
 )
 from fourdrinier.hosts.drivers import HostDriverPingResult
-from fourdrinier.schemas import HostCreate, HostPingResponse, HostRead
+from fourdrinier.schemas import HostCreate, HostPingResponse, HostRead, HostUpdate
 
 router: APIRouter = APIRouter(prefix="/hosts", tags=["hosts"])
 
@@ -68,6 +69,24 @@ async def get_host(host_id: uuid.UUID, service: HostServiceDep) -> HostRead:
         host: Host = await service.get(host_id)
     except HostNotFoundError as exc:
         raise _not_found(exc) from exc
+    return host_response(host)
+
+
+@router.patch("/{host_id}", response_model=HostRead)
+async def update_host(
+    host_id: uuid.UUID,
+    body: HostUpdate,
+    service: HostServiceDep,
+) -> HostRead:
+    try:
+        host: Host = await service.update(host_id, body)
+    except (HostNotFoundError, HostKeypairNotFoundError) as exc:
+        raise _not_found(exc) from exc
+    except (HostNameConflictError, HostTypeChangeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     return host_response(host)
 
 

@@ -30,11 +30,13 @@ def crud(monkeypatch: pytest.MonkeyPatch) -> CrudMocks:
     get_host: AsyncMock = AsyncMock(spec=hosts_crud.get_host)
     get_keypair: AsyncMock = AsyncMock(spec=keypairs_crud.get_keypair)
     list_hosts: AsyncMock = AsyncMock(spec=hosts_crud.list_hosts)
+    update_host: AsyncMock = AsyncMock(spec=hosts_crud.update_host)
     monkeypatch.setattr(hosts_crud, "create_host", create_host)
     monkeypatch.setattr(hosts_crud, "delete_host", delete_host)
     monkeypatch.setattr(hosts_crud, "get_host", get_host)
     monkeypatch.setattr(keypairs_crud, "get_keypair", get_keypair)
     monkeypatch.setattr(hosts_crud, "list_hosts", list_hosts)
+    monkeypatch.setattr(hosts_crud, "update_host", update_host)
     get_keypair.return_value = object()
     return CrudMocks(
         create_host=create_host,
@@ -42,4 +44,5 @@ def crud(monkeypatch: pytest.MonkeyPatch) -> CrudMocks:
         get_host=get_host,
         get_keypair=get_keypair,
         list_hosts=list_hosts,
+        update_host=update_host,
     )

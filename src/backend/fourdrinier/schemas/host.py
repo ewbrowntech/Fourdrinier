@@ -18,6 +18,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 _ADDRESS_PATTERN: str = r"^[A-Za-z0-9._\-]+$"
@@ -91,6 +92,87 @@ class KubernetesHostCreate(HostCreateBase):
 
 type HostCreate = Annotated[
     DockerHostCreate | KubernetesHostCreate,
+    Field(discriminator="type"),
+]
+
+
+class HostUpdateBase(BaseModel):
+    """Define optional fields shared by every host update request."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    enabled: bool | None = None
+    labels: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def reject_explicit_nulls(self) -> HostUpdateBase:
+        """Reject null for fields whose persisted values cannot be null.
+
+        Returns:
+            The validated partial update.
+
+        Raises:
+            ValueError: If the caller explicitly supplies null for an update field.
+        """
+        null_fields: list[str] = [
+            field_name
+            for field_name in self.model_fields_set
+            if field_name != "type" and getattr(self, field_name) is None
+        ]
+        if null_fields:
+            raise ValueError(f"{null_fields[0]} cannot be null")
+        return self
+
+
+class DockerHostUpdate(HostUpdateBase):
+    """Define a partial update for a Docker host."""
+
+    type: Literal["docker"]
+    address: str | None = Field(default=None, max_length=255, pattern=_ADDRESS_PATTERN)
+    port: int | None = Field(default=None, ge=1, le=65535)
+    username: str | None = Field(default=None, max_length=255, pattern=_USERNAME_PATTERN)
+    keypair_id: uuid.UUID | None = None
+
+
+class KubernetesHostUpdate(HostUpdateBase):
+    """Define a partial update for a Kubernetes host."""
+
+    type: Literal["kubernetes"]
+    api_url: HttpsUrl | None = None
+    ca_cert_pem: str | None = None
+    token: str | None = Field(default=None, min_length=1)
+    namespace: str | None = Field(
+        default=None,
+        max_length=63,
+        pattern=_NAMESPACE_PATTERN,
+    )
+
+    @field_validator("ca_cert_pem")
+    @classmethod
+    def validate_ca_certificate(cls, value: str | None) -> str | None:
+        """Validate updated trust material when the caller supplies it.
+
+        Args:
+            value: Optional PEM-encoded certificate bundle supplied by the caller.
+
+        Returns:
+            The unchanged certificate bundle or ``None`` when omitted.
+
+        Raises:
+            ValueError: If the value is not a PEM certificate bundle.
+        """
+        if value is None:
+            return None
+        try:
+            _certificates: list[x509.Certificate] = x509.load_pem_x509_certificates(value.encode())
+        except ValueError as exc:
+            raise ValueError("ca_cert_pem is not a valid PEM certificate bundle") from exc
+        return value
+
+
+type HostUpdate = Annotated[
+    DockerHostUpdate | KubernetesHostUpdate,
     Field(discriminator="type"),
 ]
 
@@ -178,6 +260,7 @@ type PingResponse = HostPingResponse
 __all__: list[str] = [
     "DockerHostCreate",
     "DockerHostRead",
+    "DockerHostUpdate",
     "DockerPingResponse",
     "HostCreate",
     "HostCreateBase",
@@ -185,9 +268,12 @@ __all__: list[str] = [
     "HostPingResponse",
     "HostRead",
     "HostReadBase",
+    "HostUpdate",
+    "HostUpdateBase",
     "HttpsUrl",
     "KubernetesHostCreate",
     "KubernetesHostRead",
+    "KubernetesHostUpdate",
     "KubernetesPingResponse",
     "PingHostKey",
     "PingResponse",

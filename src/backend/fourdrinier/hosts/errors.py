@@ -25,6 +25,10 @@ class HostKeypairNotFoundError(HostError):
     """The SSH keypair selected for a Docker host does not exist."""
 
 
+class HostTypeChangeError(HostError):
+    """An update attempts to change a host's provider type."""
+
+
 class HostDriverUnavailableError(HostError):
     """The selected host driver cannot currently perform the operation."""
 
@@ -64,5 +68,6 @@ __all__ = [
     "HostPermissionDeniedError",
     "HostRemoteError",
     "HostTrustVerificationError",
+    "HostTypeChangeError",
     "HostUnreachableError",
 ]

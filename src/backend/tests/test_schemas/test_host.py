@@ -21,13 +21,16 @@ from pydantic import TypeAdapter, ValidationError
 from fourdrinier.schemas.host import (
     DockerHostCreate,
     DockerHostRead,
+    DockerHostUpdate,
     DockerPingResponse,
     HostCreate,
     HostListResponse,
     HostPingResponse,
     HostRead,
+    HostUpdate,
     KubernetesHostCreate,
     KubernetesHostRead,
+    KubernetesHostUpdate,
     KubernetesPingResponse,
 )
 
@@ -359,3 +362,71 @@ def test_ping_response_009_nominal_provider_payload_is_selected_by_type(
     # Assert
     assert result.type == expected_type
     assert result.status == "ok"
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_type"),
+    [
+        pytest.param(
+            {"type": "docker", "keypair_id": str(_KEYPAIR_ID)},
+            DockerHostUpdate,
+            id="docker-credential",
+        ),
+        pytest.param(
+            {"type": "kubernetes", "token": "replacement-token"},
+            KubernetesHostUpdate,
+            id="kubernetes-credential",
+        ),
+    ],
+)
+def test_host_update_010_nominal_partial_credential_update_is_selected_by_type(
+    payload: dict[str, Any],
+    expected_type: type[DockerHostUpdate] | type[KubernetesHostUpdate],
+) -> None:
+    """Test 010 - Nominal
+    Condition: A partial update contains a provider discriminator and replacement credential
+    Result: The matching update schema accepts only the supplied mutable field
+    """
+    # Arrange
+    adapter: TypeAdapter[HostUpdate] = TypeAdapter(HostUpdate)
+
+    # Act
+    result: DockerHostUpdate | KubernetesHostUpdate = adapter.validate_python(payload)
+
+    # Assert
+    assert isinstance(result, expected_type)
+    assert result.model_fields_set == set(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({"type": "docker", "name": None}, id="null-common-field"),
+        pytest.param({"type": "docker", "port": None}, id="null-provider-field"),
+        pytest.param(
+            {"type": "kubernetes", "ca_cert_pem": None},
+            id="null-certificate",
+        ),
+        pytest.param(
+            {"type": "docker", "token": "wrong-provider"},
+            id="wrong-provider-field",
+        ),
+        pytest.param(
+            {"type": "kubernetes", "ca_cert_pem": "not-a-certificate"},
+            id="invalid-ca",
+        ),
+    ],
+)
+def test_host_update_011_anomalous_invalid_partial_field_is_rejected(
+    payload: dict[str, Any],
+) -> None:
+    """Test 011 - Anomalous
+    Condition: A partial update has null, cross-provider, or invalid certificate data
+    Result: ValidationError rejects the update before it reaches the service
+    """
+    # Arrange
+    adapter: TypeAdapter[HostUpdate] = TypeAdapter(HostUpdate)
+
+    # Act / Assert
+    with pytest.raises(ValidationError):
+        adapter.validate_python(payload)
