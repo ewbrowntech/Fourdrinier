@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { api } from '../api'
-import type { HostPingResponse, HostRead, KeypairRead } from '../api'
+import type { HostRead, KeypairRead } from '../api'
 import Lamp from '../components/Lamp'
-import type { LampState } from '../components/Lamp'
-import RegisterHostForm from '../components/RegisterHostForm'
-
-type PingUI =
-  | { phase: 'testing' }
-  | { phase: 'ok'; summary: string }
-  | { phase: 'fail'; message: string }
+import { takePendingHost } from '../pendingHost'
+import {
+  hostEndpoint,
+  lampState,
+  pingSummary,
+  STATUS_LABELS,
+  STATUS_PILL_CLASS,
+  type PingUI,
+} from '../hostStatus'
 
 interface KeypairNotice {
   keypair: KeypairRead
@@ -17,50 +20,12 @@ interface KeypairNotice {
   username: string
 }
 
-function pingSummary(result: HostPingResponse): string {
-  const latency = `${result.latency_ms.toFixed(1)} ms`
-  if (result.type === 'docker') {
-    return `${latency} · Docker ${result.docker_version} · ${result.os}/${result.arch}`
-  }
-  return `${latency} · Kubernetes ${result.git_version} · namespace ${result.namespace}`
-}
-
-function hostEndpoint(host: HostRead): string {
-  if (host.type === 'docker') {
-    return `${host.username}@${host.address}:${host.port}`
-  }
-  return host.api_url
-}
-
-function lampState(host: HostRead, ping: PingUI | undefined): LampState {
-  if (ping?.phase === 'testing') return 'testing'
-  if (ping?.phase === 'fail') return 'fault'
-  if (ping?.phase === 'ok' || host.last_seen_at !== null) return 'ok'
-  return 'off'
-}
-
-const STATUS_LABELS: Record<LampState, string> = {
-  testing: 'Testing',
-  fault: 'Fault',
-  ok: 'Verified',
-  off: 'Not tested',
-}
-
-const STATUS_PILL_CLASS: Record<LampState, string> = {
-  testing: 'testing',
-  fault: 'fault',
-  ok: 'ok',
-  off: '',
-}
-
 function HostsPage() {
   const [hosts, setHosts] = useState<HostRead[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [keypairs, setKeypairs] = useState<KeypairRead[]>([])
-  const [formOpen, setFormOpen] = useState(false)
-  const [pings, setPings] = useState<Record<string, PingUI>>({})
   const [notice, setNotice] = useState<KeypairNotice | null>(null)
   const [copied, setCopied] = useState(false)
+  const [pings, setPings] = useState<Record<string, PingUI>>({})
 
   const loadHosts = useCallback(async () => {
     setLoadError(null)
@@ -71,53 +36,42 @@ function HostsPage() {
     }
   }, [])
 
+  const runPing = useCallback(async (hostId: string) => {
+    setPings((prev) => ({ ...prev, [hostId]: { phase: 'testing' } }))
+    try {
+      const result = await api.pingHost(hostId)
+      setPings((prev) => ({ ...prev, [hostId]: { phase: 'ok', summary: pingSummary(result) } }))
+      // A successful ping stamps last_seen_at server-side; refresh the row to reflect it.
+      const refreshed = await api.getHost(hostId)
+      setHosts((prev) => (prev === null ? prev : prev.map((h) => (h.id === hostId ? refreshed : h))))
+    } catch (err) {
+      setPings((prev) => ({
+        ...prev,
+        [hostId]: { phase: 'fail', message: err instanceof Error ? err.message : 'Connection test failed.' },
+      }))
+    }
+  }, [])
+
   useEffect(() => {
     void loadHosts()
   }, [loadHosts])
 
-  async function openForm() {
-    setFormOpen(true)
-    try {
-      setKeypairs(await api.listKeypairs())
-    } catch {
-      setKeypairs([])
-    }
-  }
-
-  function handleCreated(host: HostRead, generated: KeypairRead | null) {
-    setHosts((prev) => [...(prev ?? []), host])
-    setFormOpen(false)
-    if (generated && host.type === 'docker') {
+  // Pick up a host that was just registered on the /hosts/new screen: ping it
+  // and surface the generated-key notice.
+  useEffect(() => {
+    const pending = takePendingHost()
+    if (!pending) return
+    void runPing(pending.host.id)
+    if (pending.generatedKeypair && pending.host.type === 'docker') {
       setCopied(false)
       setNotice({
-        keypair: generated,
-        hostName: host.name,
-        address: host.address,
-        username: host.username,
+        keypair: pending.generatedKeypair,
+        hostName: pending.host.name,
+        address: pending.host.address,
+        username: pending.host.username,
       })
     }
-  }
-
-  async function handlePing(host: HostRead) {
-    setPings((prev) => ({ ...prev, [host.id]: { phase: 'testing' } }))
-    try {
-      const result = await api.pingHost(host.id)
-      setPings((prev) => ({ ...prev, [host.id]: { phase: 'ok', summary: pingSummary(result) } }))
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Connection test failed.'
-      setPings((prev) => ({ ...prev, [host.id]: { phase: 'fail', message } }))
-    }
-  }
-
-  async function handleDelete(host: HostRead) {
-    if (!window.confirm(`Remove ${host.name}? Fourdrinier will forget this host.`)) return
-    try {
-      await api.deleteHost(host.id)
-      setHosts((prev) => (prev ?? []).filter((h) => h.id !== host.id))
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not remove the host.')
-    }
-  }
+  }, [runPing])
 
   async function copyPublicKey(key: string) {
     await navigator.clipboard.writeText(key)
@@ -133,20 +87,10 @@ function HostsPage() {
             <span className="count">{hosts.length}</span>
           )}
         </h1>
-        {!formOpen && (
-          <button type="button" className="btn primary" onClick={() => void openForm()}>
-            Register host
-          </button>
-        )}
+        <Link className="btn primary" to="/hosts/new">
+          Register host
+        </Link>
       </div>
-
-      {formOpen && (
-        <RegisterHostForm
-          keypairs={keypairs}
-          onCreated={handleCreated}
-          onCancel={() => setFormOpen(false)}
-        />
-      )}
 
       {notice && (
         <aside className="notice">
@@ -177,7 +121,7 @@ function HostsPage() {
         </p>
       )}
 
-      {hosts !== null && hosts.length === 0 && !formOpen && (
+      {hosts !== null && hosts.length === 0 && (
         <div className="empty">
           <svg className="empty-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <rect x="2" y="4" width="20" height="7" rx="2" stroke="currentColor" strokeWidth="1.5" />
@@ -190,50 +134,39 @@ function HostsPage() {
             A host is a machine Fourdrinier runs Minecraft servers on — a box reachable over SSH
             with Docker, or a Kubernetes cluster.
           </p>
-          <button type="button" className="btn primary" onClick={() => void openForm()}>
+          <Link className="btn primary" to="/hosts/new">
             Register your first host
-          </button>
+          </Link>
         </div>
       )}
 
       {hosts !== null && hosts.length > 0 && (
         <ul className="host-board">
           {hosts.map((host) => {
-            const ping = pings[host.id]
-            const state = lampState(host, ping)
+            const state = lampState(host, pings[host.id])
             return (
-              <li key={host.id} className="host-row">
-                <Lamp state={state} />
-                <div className="host-main">
-                  <span className="host-name">{host.name}</span>
-                  <span className="type-tag">{host.type === 'docker' ? 'Docker' : 'Kubernetes'}</span>
-                </div>
-                <div className="host-status">
-                  <span className={`pill ${STATUS_PILL_CLASS[state]}`}>{STATUS_LABELS[state]}</span>
-                </div>
-                <div className="host-meta">
-                  <span className="host-endpoint">{hostEndpoint(host)}</span>
-                  {ping?.phase === 'ok' && <span className="host-detail ok">{ping.summary}</span>}
-                  {ping?.phase === 'fail' && <span className="host-detail fault">{ping.message}</span>}
-                  {!ping && host.last_seen_at !== null && (
-                    <span className="host-detail idle">
-                      last seen {new Date(host.last_seen_at).toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <div className="host-actions">
-                  <button
-                    type="button"
-                    className="btn small"
-                    onClick={() => void handlePing(host)}
-                    disabled={ping?.phase === 'testing'}
-                  >
-                    {ping?.phase === 'testing' ? 'Testing…' : 'Test connection'}
-                  </button>
-                  <button type="button" className="btn small ghost" onClick={() => void handleDelete(host)}>
-                    Remove
-                  </button>
-                </div>
+              <li key={host.id}>
+                <Link className="host-row" to="/hosts/$hostId" params={{ hostId: host.id }}>
+                  <Lamp state={state} />
+                  <div className="host-main">
+                    <span className="host-name">{host.name}</span>
+                    <span className="type-tag">{host.type === 'docker' ? 'Docker' : 'Kubernetes'}</span>
+                  </div>
+                  <div className="host-status">
+                    <span className={`pill ${STATUS_PILL_CLASS[state]}`}>{STATUS_LABELS[state]}</span>
+                  </div>
+                  <div className="host-meta">
+                    <span className="host-endpoint">{hostEndpoint(host)}</span>
+                    {host.last_seen_at !== null && (
+                      <span className="host-detail idle">
+                        last seen {new Date(host.last_seen_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <span className="host-chevron" aria-hidden="true">
+                    →
+                  </span>
+                </Link>
               </li>
             )
           })}

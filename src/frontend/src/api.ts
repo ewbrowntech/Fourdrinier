@@ -50,6 +50,33 @@ export interface KubernetesHostCreate {
 
 export type HostCreate = DockerHostCreate | KubernetesHostCreate
 
+// Partial updates. `type` is a required discriminator that must match the
+// persisted host; every other field is optional and omitted fields are left
+// unchanged. Credentials (keypair_id, token, ca_cert_pem) are write-only.
+export interface DockerHostUpdate {
+  type: 'docker'
+  name?: string
+  enabled?: boolean
+  labels?: Record<string, string>
+  address?: string
+  port?: number
+  username?: string
+  keypair_id?: string
+}
+
+export interface KubernetesHostUpdate {
+  type: 'kubernetes'
+  name?: string
+  enabled?: boolean
+  labels?: Record<string, string>
+  api_url?: string
+  ca_cert_pem?: string
+  token?: string
+  namespace?: string
+}
+
+export type HostUpdate = DockerHostUpdate | KubernetesHostUpdate
+
 export interface DockerPingResponse {
   status: 'ok'
   type: 'docker'
@@ -121,8 +148,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   listHosts: () => request<HostRead[]>('/hosts'),
+  getHost: (id: string) => request<HostRead>(`/hosts/${id}`),
   createHost: (body: HostCreate) =>
     request<HostRead>('/hosts', { method: 'POST', body: JSON.stringify(body) }),
+  updateHost: (id: string, body: HostUpdate) =>
+    request<HostRead>(`/hosts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteHost: (id: string) => request<void>(`/hosts/${id}`, { method: 'DELETE' }),
   pingHost: (id: string) => request<HostPingResponse>(`/hosts/${id}/ping`, { method: 'POST' }),
   listKeypairs: () => request<KeypairRead[]>('/keypairs'),

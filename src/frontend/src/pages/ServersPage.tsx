@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router'
+
 function ServersPage() {
   return (
     <>
@@ -22,7 +24,7 @@ function ServersPage() {
           <span className="soon-tag">Coming soon</span>
         </p>
         <p>
-          In the meantime, <a href="#/hosts">register a host</a> so there&apos;s somewhere to run
+          In the meantime, <Link to="/hosts">register a host</Link> so there&apos;s somewhere to run
           them.
         </p>
       </div>

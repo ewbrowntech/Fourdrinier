@@ -83,6 +83,29 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+  Chrome text (buttons, nav, labels, pills, tags, headings) is signage, not
+  content — dragging across it to select reads as an accidental smudge. Default
+  the whole surface to unselectable, then re-enable selection below only on the
+  data a user would actually want to copy.
+*/
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+select,
+textarea,
+code,
+.host-endpoint,
+.host-name,
+.detail-item dd,
+.pubkey {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 h1,
 h2,
 h3 {
@@ -330,9 +353,28 @@ code {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+a.host-row {
+  text-decoration: none;
+  color: inherit;
+}
+
 .host-row:hover {
   border-color: var(--line-strong);
   box-shadow: var(--shadow-lift);
+}
+
+.host-chevron {
+  grid-area: actions;
+  justify-self: end;
+  align-self: center;
+  font-size: 1.1rem;
+  color: var(--faint);
+  transition: color 0.15s, transform 0.15s;
+}
+
+.host-row:hover .host-chevron {
+  color: var(--brand);
+  transform: translateX(2px);
 }
 
 .host-row > .dot {
@@ -418,6 +460,9 @@ code {
 /* ---- Buttons ----------------------------------------------------------- */
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-ui);
   font-weight: 600;
   font-size: 0.85rem;
@@ -428,6 +473,7 @@ code {
   border-radius: var(--r-sm);
   padding: 0.55rem 0.95rem;
   cursor: pointer;
+  text-decoration: none;
   transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
 
@@ -467,6 +513,17 @@ code {
   color: var(--fault);
   background: var(--fault-tint);
   border-color: transparent;
+}
+
+.btn.danger {
+  background: var(--fault);
+  border-color: var(--fault);
+  color: #ffffff;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fault) 85%, #000);
+  border-color: color-mix(in srgb, var(--fault) 85%, #000);
 }
 
 /* ---- Register panel ---------------------------------------------------- */
@@ -704,6 +761,194 @@ code {
   padding: 0.2rem 0.55rem;
 }
 
+/* ---- Host details ------------------------------------------------------ */
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--brand);
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.detail-head > .dot {
+  align-self: center;
+}
+
+.detail-title {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.detail-title h1 {
+  font-weight: 700;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+}
+
+.detail-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.icon-btn:hover:not(:disabled) {
+  color: var(--brand);
+  border-color: var(--muted);
+  background: var(--surface-2);
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-btn.danger {
+  color: var(--fault);
+}
+
+.icon-btn.danger:hover:not(:disabled) {
+  color: var(--fault);
+  border-color: color-mix(in srgb, var(--fault) 45%, transparent);
+  background: var(--fault-tint);
+}
+
+.icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.icon.spin {
+  animation: icon-spin 0.9s linear infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.detail-grid {
+  margin: 1.4rem 0;
+  padding: 0.4rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+
+.detail-item {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-item dt {
+  flex: 0 0 11rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.detail-item dd {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.92rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.label-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.label-chip {
+  font-family: var(--font-data);
+  font-size: 0.76rem;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+}
+
+/* ---- Modal ------------------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(23, 33, 27, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  width: 100%;
+  max-width: 26rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-lift);
+}
+
+.modal h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.5rem;
+}
+
+.modal p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.modal .form-actions {
+  margin-top: 1.4rem;
+}
+
 /* ---- Responsive & motion ----------------------------------------------- */
 
 @media (max-width: 620px) {
@@ -737,10 +982,20 @@ code {
   .field-grid {
     grid-template-columns: 1fr;
   }
+
+  .detail-item {
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .detail-item dt {
+    flex-basis: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot.testing {
+  .dot.testing,
+  .icon.spin {
     animation: none;
   }
 

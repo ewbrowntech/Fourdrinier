@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "packageManager": "pnpm@11.12.0",
+  "packageManager": "pnpm@11.13.1",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -13,10 +13,13 @@
   "dependencies": {
     "@fontsource-variable/archivo": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@tanstack/react-router": "^1.170.18",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@tanstack/react-router-devtools": "^1.167.0",
+    "@tanstack/router-plugin": "^1.168.20",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
