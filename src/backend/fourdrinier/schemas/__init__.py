@@ -25,6 +25,7 @@ from fourdrinier.schemas.host import (
     PingHostKey,
     PingResponse,
 )
+from fourdrinier.schemas.server import ServerCreate, ServerListResponse, ServerRead, ServerUpdate
 from fourdrinier.schemas.ssh_keypair import KeypairCreate, KeypairRead
 
 __all__: list[str] = [
@@ -49,4 +50,8 @@ __all__: list[str] = [
     "KubernetesPingResponse",
     "PingHostKey",
     "PingResponse",
+    "ServerCreate",
+    "ServerListResponse",
+    "ServerRead",
+    "ServerUpdate",
 ]

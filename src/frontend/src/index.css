@@ -356,6 +356,11 @@ code {
   background: var(--warn-tint);
 }
 
+.pill.unassigned {
+  color: var(--warn);
+  background: var(--warn-tint);
+}
+
 /* ---- Host list --------------------------------------------------------- */
 
 .host-board {
@@ -492,6 +497,219 @@ a.host-row:focus-visible {
   justify-self: end;
   display: flex;
   gap: 0.4rem;
+}
+
+/* ---- Logical server plans --------------------------------------------- */
+
+.server-board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.server-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'cube main status'
+    'cube meta actions';
+  align-items: center;
+  column-gap: 0.95rem;
+  row-gap: 0.5rem;
+  padding: 1rem 1.15rem;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  overflow: hidden;
+}
+
+.server-row::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--warn) 0,
+    var(--warn) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  opacity: 0.65;
+}
+
+.server-row:hover,
+.server-row:focus-visible {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-lift);
+}
+
+.server-row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.server-cube {
+  grid-area: cube;
+  position: relative;
+  display: block;
+  width: 27px;
+  height: 27px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border: 1px solid color-mix(in srgb, var(--brand) 48%, transparent);
+  border-radius: 6px;
+  transform: rotate(45deg);
+}
+
+.server-cube span {
+  position: absolute;
+  inset: 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+
+.server-cube.large {
+  grid-area: auto;
+  width: 31px;
+  height: 31px;
+  margin: 0 0.15rem;
+}
+
+.server-main {
+  grid-area: main;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.server-status {
+  grid-area: status;
+  justify-self: end;
+}
+
+.server-meta {
+  grid-area: meta;
+  min-width: 0;
+  color: var(--muted);
+  font-family: var(--font-data);
+  font-size: 0.8rem;
+}
+
+.server-create-panel .panel-head h1 {
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.panel-kicker {
+  margin: 0 0 0.2rem;
+  color: var(--faint);
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.experimental-tag {
+  display: inline-flex;
+  align-items: center;
+  color: var(--warn);
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 20%, transparent);
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.experimental-tag.compact {
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.42rem;
+  font-size: 0.6rem;
+  vertical-align: 0.1em;
+}
+
+.server-fixed-spec {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 1.25rem 0 0;
+  padding: 1px;
+  background: var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.server-fixed-spec div {
+  padding: 0.8rem;
+  background: var(--surface-2);
+}
+
+.server-fixed-spec dt {
+  margin-bottom: 0.25rem;
+  color: var(--faint);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.server-fixed-spec dd {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+}
+
+.scope-note {
+  margin: 1.15rem 0 0;
+  padding-left: 0.85rem;
+  color: var(--muted);
+  border-left: 2px solid var(--warn);
+  font-size: 0.84rem;
+}
+
+.server-plan-note {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  margin: 1.25rem 0;
+  background: var(--surface-2);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r);
+}
+
+.plan-line {
+  width: 3px;
+  flex: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--warn) 0,
+    var(--warn) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.server-plan-note strong {
+  font-size: 0.9rem;
+}
+
+.server-plan-note p {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 /* ---- Buttons ----------------------------------------------------------- */
@@ -1046,6 +1264,24 @@ a.host-row:focus-visible {
   .host-status,
   .host-actions {
     justify-self: start;
+  }
+
+  .server-row {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'cube main'
+      'cube status'
+      'cube meta'
+      'cube actions';
+    row-gap: 0.6rem;
+  }
+
+  .server-status {
+    justify-self: start;
+  }
+
+  .server-fixed-spec {
+    grid-template-columns: 1fr;
   }
 
   .field-grid {

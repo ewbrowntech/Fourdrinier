@@ -100,6 +100,26 @@ export interface KubernetesPingResponse {
 
 export type HostPingResponse = DockerPingResponse | KubernetesPingResponse
 
+export interface ServerRead {
+  id: string
+  name: string
+  runtime: 'pumpkin'
+  minecraft_version: string
+  desired_state: 'running' | 'stopped'
+  spec_generation: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ServerCreate {
+  name: string
+  runtime?: 'pumpkin'
+}
+
+export interface ServerUpdate {
+  name?: string
+}
+
 export interface KeypairRead {
   id: string
   name: string
@@ -155,6 +175,13 @@ export const api = {
     request<HostRead>(`/hosts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteHost: (id: string) => request<void>(`/hosts/${id}`, { method: 'DELETE' }),
   pingHost: (id: string) => request<HostPingResponse>(`/hosts/${id}/ping`, { method: 'POST' }),
+  listServers: () => request<ServerRead[]>('/servers'),
+  getServer: (id: string) => request<ServerRead>(`/servers/${id}`),
+  createServer: (body: ServerCreate) =>
+    request<ServerRead>('/servers', { method: 'POST', body: JSON.stringify(body) }),
+  updateServer: (id: string, body: ServerUpdate) =>
+    request<ServerRead>(`/servers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteServer: (id: string) => request<void>(`/servers/${id}`, { method: 'DELETE' }),
   listKeypairs: () => request<KeypairRead[]>('/keypairs'),
   createKeypair: (name: string, privateKey?: string) =>
     request<KeypairRead>('/keypairs', {

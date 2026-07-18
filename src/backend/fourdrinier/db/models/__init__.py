@@ -5,6 +5,7 @@ from fourdrinier.db.models.host import (
     Host,
     KubernetesHostDetails,
 )
+from fourdrinier.db.models.server import Server
 from fourdrinier.db.models.ssh_keypair import KeypairSource, SSHKeypair
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "KeypairSource",
     "KubernetesHostDetails",
     "SSHKeypair",
+    "Server",
 ]

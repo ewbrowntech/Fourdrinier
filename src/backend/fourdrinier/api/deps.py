@@ -17,6 +17,7 @@ from fourdrinier.hosts.docker import DockerHostDriver
 from fourdrinier.hosts.drivers import HostDriverRegistry
 from fourdrinier.hosts.kubernetes import KubernetesHostDriver
 from fourdrinier.hosts.service import HostService
+from fourdrinier.servers.service import ServerService
 
 
 def get_host_service(session: DbSession, settings: SettingsDep) -> HostService:
@@ -53,4 +54,25 @@ def get_host_service(session: DbSession, settings: SettingsDep) -> HostService:
 
 HostServiceDep = Annotated[HostService, Depends(get_host_service)]
 
-__all__: list[str] = ["HostServiceDep", "get_host_service"]
+
+def get_server_service(session: DbSession) -> ServerService:
+    """Build a logical server service for the current request.
+
+    Args:
+        session: Request-scoped database session.
+
+    Returns:
+        A logical server service limited to local persistence operations.
+    """
+    service: ServerService = ServerService(session=session)
+    return service
+
+
+ServerServiceDep = Annotated[ServerService, Depends(get_server_service)]
+
+__all__: list[str] = [
+    "HostServiceDep",
+    "ServerServiceDep",
+    "get_host_service",
+    "get_server_service",
+]

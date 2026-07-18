@@ -12,3 +12,4 @@ from typing import Any
 type JsonObject = dict[str, Any]
 type HostFactory = Callable[..., Awaitable[JsonObject]]
 type KeypairFactory = Callable[[str], Awaitable[JsonObject]]
+type ServerFactory = Callable[..., Awaitable[JsonObject]]

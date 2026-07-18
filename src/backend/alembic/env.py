@@ -16,6 +16,7 @@ from fourdrinier.db.models import (  # noqa: F401 — register models on metadat
     DockerHostDetails,
     Host,
     KubernetesHostDetails,
+    Server,
     SSHKeypair,
 )
 
