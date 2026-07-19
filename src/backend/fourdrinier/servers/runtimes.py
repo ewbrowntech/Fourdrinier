@@ -24,7 +24,7 @@ class RuntimeAdapter(Protocol):
     runtime: ServerRuntime
     minimum_resources: ResourceAllocation
 
-    def resolve_version(self, requested: str | None) -> str:
+    async def resolve_version(self, requested: str | None) -> str:
         """Resolve a requested Minecraft version to one this runtime supports.
 
         Args:
@@ -37,6 +37,8 @@ class RuntimeAdapter(Protocol):
         Raises:
             ServerVersionUnsupportedError: If the runtime does not support the
                 requested version.
+            RuntimeVersionSourceError: If the runtime's version source cannot be
+                consulted.
         """
         ...
 

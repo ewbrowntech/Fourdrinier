@@ -59,7 +59,7 @@ def service_dependencies() -> ServiceDependencies:
     runtimes: Mock = Mock(spec=RuntimeRegistry)
     runtime: Mock = Mock(spec=RuntimeAdapter)
     runtime.runtime = ServerRuntime.PUMPKIN
-    runtime.resolve_version.return_value = PUMPKIN_MINECRAFT_VERSION
+    runtime.resolve_version = AsyncMock(return_value=PUMPKIN_MINECRAFT_VERSION)
     runtime.minimum_resources = ResourceAllocation(
         cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
         memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,

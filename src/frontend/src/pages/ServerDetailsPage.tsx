@@ -3,8 +3,9 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { api } from '../api'
 import type { ServerRead } from '../api'
 import ConfirmDialog from '../components/ConfirmDialog'
-import ServerResourcesForm from '../components/ServerResourcesForm'
-import { TrashIcon } from '../components/icons'
+import EditServerForm from '../components/EditServerForm'
+import { PencilIcon, TrashIcon } from '../components/icons'
+import { formatCpu, formatMemory } from '../serverResources'
 
 interface ServerDetailsPageProps {
   serverId: string
@@ -18,6 +19,7 @@ function ServerDetailsPage({ serverId }: ServerDetailsPageProps) {
   const navigate = useNavigate()
   const [server, setServer] = useState<ServerRead | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -33,6 +35,11 @@ function ServerDetailsPage({ serverId }: ServerDetailsPageProps) {
   useEffect(() => {
     void loadServer()
   }, [loadServer])
+
+  function handleUpdated(updated: ServerRead) {
+    setServer(updated)
+    setEditing(false)
+  }
 
   async function handleDelete() {
     if (!server) return
@@ -85,6 +92,16 @@ function ServerDetailsPage({ serverId }: ServerDetailsPageProps) {
         <div className="detail-actions">
           <button
             type="button"
+            className="icon-btn"
+            onClick={() => setEditing(true)}
+            disabled={editing}
+            title="Edit server"
+            aria-label="Edit server"
+          >
+            <PencilIcon className="icon" />
+          </button>
+          <button
+            type="button"
             className="icon-btn danger"
             onClick={() => setConfirmDelete(true)}
             title="Delete server"
@@ -107,38 +124,52 @@ function ServerDetailsPage({ serverId }: ServerDetailsPageProps) {
         <p className="board-error" role="alert">{loadError}</p>
       )}
 
-      <ServerResourcesForm server={server} onUpdated={setServer} />
-
-      <dl className="detail-grid">
-        <div className="detail-item">
-          <dt>Runtime</dt>
-          <dd>Pumpkin <span className="experimental-tag compact">Experimental</span></dd>
-        </div>
-        <div className="detail-item">
-          <dt>Minecraft version</dt>
-          <dd>{server.minecraft_version}</dd>
-        </div>
-        <div className="detail-item">
-          <dt>Desired state</dt>
-          <dd>{server.desired_state === 'running' ? 'Running' : 'Stopped'}</dd>
-        </div>
-        <div className="detail-item">
-          <dt>Specification generation</dt>
-          <dd>{server.spec_generation}</dd>
-        </div>
-        <div className="detail-item">
-          <dt>Created</dt>
-          <dd>{formatTimestamp(server.created_at)}</dd>
-        </div>
-        <div className="detail-item">
-          <dt>Updated</dt>
-          <dd>{formatTimestamp(server.updated_at)}</dd>
-        </div>
-        <div className="detail-item">
-          <dt>Server ID</dt>
-          <dd><code>{server.id}</code></dd>
-        </div>
-      </dl>
+      {editing ? (
+        <EditServerForm
+          server={server}
+          onUpdated={handleUpdated}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <dl className="detail-grid">
+          <div className="detail-item">
+            <dt>Runtime</dt>
+            <dd>Pumpkin <span className="experimental-tag compact">Experimental</span></dd>
+          </div>
+          <div className="detail-item">
+            <dt>Minecraft version</dt>
+            <dd>{server.minecraft_version}</dd>
+          </div>
+          <div className="detail-item">
+            <dt>CPU allocation</dt>
+            <dd>{formatCpu(server.cpu_millicores)}</dd>
+          </div>
+          <div className="detail-item">
+            <dt>Memory allocation</dt>
+            <dd>{formatMemory(server.memory_bytes)}</dd>
+          </div>
+          <div className="detail-item">
+            <dt>Desired state</dt>
+            <dd>{server.desired_state === 'running' ? 'Running' : 'Stopped'}</dd>
+          </div>
+          <div className="detail-item">
+            <dt>Specification generation</dt>
+            <dd>{server.spec_generation}</dd>
+          </div>
+          <div className="detail-item">
+            <dt>Created</dt>
+            <dd>{formatTimestamp(server.created_at)}</dd>
+          </div>
+          <div className="detail-item">
+            <dt>Updated</dt>
+            <dd>{formatTimestamp(server.updated_at)}</dd>
+          </div>
+          <div className="detail-item">
+            <dt>Server ID</dt>
+            <dd><code>{server.id}</code></dd>
+          </div>
+        </dl>
+      )}
 
       {confirmDelete && (
         <ConfirmDialog

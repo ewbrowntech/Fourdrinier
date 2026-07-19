@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../api'
-import type { ServerRead } from '../api'
+import type { ServerRead, ServerUpdate } from '../api'
 import {
   bytesToGibibytes,
   coresToMillicores,
@@ -10,51 +10,60 @@ import {
   minimumResourcesForRuntime,
 } from '../serverResources'
 
-interface ServerResourcesFormProps {
+interface EditServerFormProps {
   server: ServerRead
   onUpdated: (server: ServerRead) => void
+  onCancel: () => void
 }
 
-function ServerResourcesForm({ server, onUpdated }: ServerResourcesFormProps) {
+function EditServerForm({ server, onUpdated, onCancel }: EditServerFormProps) {
   const minimumResources = minimumResourcesForRuntime(server.runtime)
+  const [name, setName] = useState(server.name)
   const [cpuCores, setCpuCores] = useState(String(millicoresToCores(server.cpu_millicores)))
   const [memoryGib, setMemoryGib] = useState(String(bytesToGibibytes(server.memory_bytes)))
-  const [saving, setSaving] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setCpuCores(String(millicoresToCores(server.cpu_millicores)))
-    setMemoryGib(String(bytesToGibibytes(server.memory_bytes)))
-  }, [server.cpu_millicores, server.memory_bytes])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSaving(true)
+    setSubmitting(true)
     setError(null)
+
+    const patch: ServerUpdate = {}
+    const trimmedName = name.trim()
+    const cpuMillicores = coresToMillicores(Number(cpuCores))
+    const memoryBytes = gibibytesToBytes(Number(memoryGib))
+
+    if (trimmedName !== server.name) patch.name = trimmedName
+    if (cpuMillicores !== server.cpu_millicores) patch.cpu_millicores = cpuMillicores
+    if (memoryBytes !== server.memory_bytes) patch.memory_bytes = memoryBytes
+
     try {
-      const updated = await api.updateServer(server.id, {
-        cpu_millicores: coresToMillicores(Number(cpuCores)),
-        memory_bytes: gibibytesToBytes(Number(memoryGib)),
-      })
-      onUpdated(updated)
+      onUpdated(await api.updateServer(server.id, patch))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the resource allocation.')
+      setError(err instanceof Error ? err.message : 'Could not save the server changes.')
     } finally {
-      setSaving(false)
+      setSubmitting(false)
     }
   }
 
   return (
-    <form className="panel resource-panel" onSubmit={handleSubmit}>
+    <form className="panel" onSubmit={handleSubmit}>
       <div className="panel-head">
-        <div>
-          <p className="panel-kicker">Compute envelope</p>
-          <h2>Resource allocation</h2>
-        </div>
-        <span className="resource-generation">Generation {server.spec_generation}</span>
+        <h2>Edit {server.name}</h2>
       </div>
 
-      <div className="field-grid resource-fields">
+      <div className="field-grid">
+        <label className="field wide">
+          <span>Name</span>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+            maxLength={255}
+            autoFocus
+          />
+        </label>
         <label className="field">
           <span>CPU allocation</span>
           <span className="input-with-unit">
@@ -89,7 +98,7 @@ function ServerResourcesForm({ server, onUpdated }: ServerResourcesFormProps) {
 
       <p className="resource-note">
         Pumpkin requires at least {minimumResources.cpuCores} cores and{' '}
-        {minimumResources.memoryGib} GiB of memory. Changing either value creates a new
+        {minimumResources.memoryGib} GiB of memory. Changing either allocation creates a new
         specification generation for the next deployment.
       </p>
 
@@ -100,12 +109,15 @@ function ServerResourcesForm({ server, onUpdated }: ServerResourcesFormProps) {
       )}
 
       <div className="form-actions">
-        <button type="submit" className="btn primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save allocation'}
+        <button type="submit" className="btn primary" disabled={submitting}>
+          {submitting ? 'Saving…' : 'Save changes'}
+        </button>
+        <button type="button" className="btn" onClick={onCancel} disabled={submitting}>
+          Cancel
         </button>
       </div>
     </form>
   )
 }
 
-export default ServerResourcesForm
+export default EditServerForm

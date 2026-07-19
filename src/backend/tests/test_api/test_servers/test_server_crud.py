@@ -56,15 +56,26 @@ async def test_create_server_001_nominal_pumpkin_configuration_is_saved(
 @pytest.mark.parametrize(
     "payload",
     [
-        pytest.param({"name": ""}, id="empty-name"),
-        pytest.param({"name": "paper-world", "runtime": "paper"}, id="unsupported-runtime"),
-        pytest.param({"name": "eager-world", "desired_state": "running"}, id="lifecycle-state"),
-        pytest.param({"name": "no-cpu", "cpu_millicores": 0}, id="zero-cpu"),
-        pytest.param({"name": "no-memory", "memory_bytes": 0}, id="zero-memory"),
-        pytest.param({"name": "default-pumpkin"}, id="default-below-runtime-minimum"),
+        pytest.param({"name": "", "runtime": "pumpkin"}, id="empty-name"),
+        pytest.param({"name": "runtimeless-world"}, id="missing-runtime"),
+        pytest.param({"name": "forge-world", "runtime": "forge"}, id="unknown-runtime"),
+        pytest.param(
+            {"name": "eager-world", "runtime": "pumpkin", "desired_state": "running"},
+            id="lifecycle-state",
+        ),
+        pytest.param({"name": "no-cpu", "runtime": "pumpkin", "cpu_millicores": 0}, id="zero-cpu"),
+        pytest.param(
+            {"name": "no-memory", "runtime": "pumpkin", "memory_bytes": 0},
+            id="zero-memory",
+        ),
+        pytest.param(
+            {"name": "default-pumpkin", "runtime": "pumpkin"},
+            id="default-below-runtime-minimum",
+        ),
         pytest.param(
             {
                 "name": "small-pumpkin",
+                "runtime": "pumpkin",
                 "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES - 1,
                 "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
             },
@@ -73,6 +84,7 @@ async def test_create_server_001_nominal_pumpkin_configuration_is_saved(
         pytest.param(
             {
                 "name": "wrong-version",
+                "runtime": "pumpkin",
                 "minecraft_version": "1.8.8",
                 "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
                 "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
@@ -111,6 +123,7 @@ async def test_create_server_003_anomalous_name_already_exists(
     original: JsonObject = await server_factory(name="shared-world")
     payload: JsonObject = {
         "name": "shared-world",
+        "runtime": "pumpkin",
         "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
         "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
     }

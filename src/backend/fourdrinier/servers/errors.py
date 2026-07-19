@@ -31,8 +31,13 @@ class RuntimeNotRegisteredError(ServerError):
     """No runtime adapter is registered for the requested server runtime."""
 
 
+class RuntimeVersionSourceError(ServerError):
+    """The runtime's upstream version source could not be consulted."""
+
+
 __all__: list[str] = [
     "RuntimeNotRegisteredError",
+    "RuntimeVersionSourceError",
     "ServerError",
     "ServerNameConflictError",
     "ServerNotFoundError",

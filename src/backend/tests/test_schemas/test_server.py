@@ -19,11 +19,11 @@ from fourdrinier.servers import (
 
 def test_server_create_001_nominal_omitted_fields_receive_product_defaults() -> None:
     """Test 001 - Nominal
-    Condition: Creation omits the runtime, version, and resource allocation fields
-    Result: The Pumpkin runtime, no version, and product default allocations are assigned
+    Condition: Creation supplies a runtime but omits version and resource allocations
+    Result: No version is pinned and product default allocations are assigned
     """
     # Arrange
-    payload: dict[str, object] = {"name": "pumpkin-patch"}
+    payload: dict[str, object] = {"name": "pumpkin-patch", "runtime": "pumpkin"}
 
     # Act
     request: ServerCreate = ServerCreate.model_validate(payload)
@@ -33,6 +33,24 @@ def test_server_create_001_nominal_omitted_fields_receive_product_defaults() -> 
     assert request.minecraft_version is None
     assert request.cpu_millicores == DEFAULT_SERVER_CPU_MILLICORES == 1_000
     assert request.memory_bytes == DEFAULT_SERVER_MEMORY_BYTES == 2_147_483_648
+
+
+def test_server_create_004_anomalous_missing_runtime_is_rejected() -> None:
+    """Test 004 - Anomalous
+    Condition: Creation omits the runtime field
+    Result: ValidationError is raised for the missing runtime
+    """
+    # Arrange
+    payload: dict[str, object] = {"name": "runtimeless-world"}
+    captured: pytest.ExceptionInfo[ValidationError]
+
+    # Act
+    with pytest.raises(ValidationError) as captured:
+        ServerCreate.model_validate(payload)
+
+    # Assert
+    assert captured.value.error_count() == 1
+    assert captured.value.errors()[0]["loc"] == ("runtime",)
 
 
 def test_server_update_002_nominal_supplied_fields_are_accepted() -> None:

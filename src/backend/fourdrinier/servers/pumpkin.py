@@ -46,7 +46,7 @@ class PumpkinRuntime:
         memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
     )
 
-    def resolve_version(self, requested: str | None) -> str:
+    async def resolve_version(self, requested: str | None) -> str:
         """Resolve a requested Minecraft version to the single supported Pumpkin version.
 
         Args:

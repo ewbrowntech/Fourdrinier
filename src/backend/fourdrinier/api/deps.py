@@ -17,6 +17,7 @@ from fourdrinier.hosts.docker import DockerHostDriver
 from fourdrinier.hosts.drivers import HostDriverRegistry
 from fourdrinier.hosts.kubernetes import KubernetesHostDriver
 from fourdrinier.hosts.service import HostService
+from fourdrinier.servers.paper import PaperRuntime
 from fourdrinier.servers.pumpkin import PumpkinRuntime
 from fourdrinier.servers.runtimes import RuntimeRegistry
 from fourdrinier.servers.service import ServerService
@@ -63,7 +64,7 @@ def get_runtime_registry() -> RuntimeRegistry:
     Returns:
         A registry containing every supported runtime adapter.
     """
-    registry: RuntimeRegistry = RuntimeRegistry(PumpkinRuntime())
+    registry: RuntimeRegistry = RuntimeRegistry(PaperRuntime(), PumpkinRuntime())
     return registry
 
 

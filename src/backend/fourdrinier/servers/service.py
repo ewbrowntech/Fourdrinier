@@ -83,9 +83,11 @@ class ServerService:
             ServerResourceMinimumError: If an allocation is below its runtime minimum.
             ServerVersionUnsupportedError: If the runtime does not support the
                 requested Minecraft version.
+            RuntimeVersionSourceError: If the runtime's version source cannot be
+                consulted.
         """
         runtime: RuntimeAdapter = self._runtimes.for_runtime(request.runtime)
-        minecraft_version: str = runtime.resolve_version(request.minecraft_version)
+        minecraft_version: str = await runtime.resolve_version(request.minecraft_version)
         _validate_resource_minimums(
             runtime,
             request.cpu_millicores,
@@ -176,6 +178,8 @@ class ServerService:
             ServerResourceMinimumError: If an allocation is below its runtime minimum.
             ServerVersionUnsupportedError: If the runtime does not support the
                 requested Minecraft version.
+            RuntimeVersionSourceError: If the runtime's version source cannot be
+                consulted.
         """
         try:
             server: Server = await self._get_required(server_id)
@@ -197,7 +201,7 @@ class ServerService:
             if resources_supplied or version_supplied:
                 runtime: RuntimeAdapter = self._runtimes.for_runtime(server.runtime)
                 if version_supplied:
-                    minecraft_version = runtime.resolve_version(
+                    minecraft_version = await runtime.resolve_version(
                         cast(str, request.minecraft_version)
                     )
                     version_changed = server.minecraft_version != minecraft_version

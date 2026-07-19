@@ -54,6 +54,7 @@ async def test_server_service_create_001_nominal_fixed_configuration_is_committe
     dependencies.runtime.resolve_version.return_value = resolved_version
     request: ServerCreate = ServerCreate(
         name="lantern-grove",
+        runtime=ServerRuntime.PUMPKIN,
         minecraft_version=requested_version,
         cpu_millicores=2_500,
         memory_bytes=3_221_225_472,
@@ -116,6 +117,7 @@ async def test_server_service_create_002_anomalous_failure_is_rolled_back(
     session: AsyncMock = dependencies.session
     request: ServerCreate = ServerCreate(
         name="conflicted-world",
+        runtime=ServerRuntime.PUMPKIN,
         cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
         memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
     )
@@ -141,6 +143,7 @@ async def test_server_service_create_002_anomalous_failure_is_rolled_back(
         pytest.param(
             ServerCreate(
                 name="small-cpu",
+                runtime=ServerRuntime.PUMPKIN,
                 cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES - 1,
                 memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
             ),
@@ -150,6 +153,7 @@ async def test_server_service_create_002_anomalous_failure_is_rolled_back(
         pytest.param(
             ServerCreate(
                 name="small-memory",
+                runtime=ServerRuntime.PUMPKIN,
                 cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
                 memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES - 1,
             ),
@@ -195,6 +199,7 @@ async def test_server_service_create_004_anomalous_unsupported_version_is_reject
     dependencies.runtime.resolve_version.side_effect = failure
     request: ServerCreate = ServerCreate(
         name="wrong-version",
+        runtime=ServerRuntime.PUMPKIN,
         minecraft_version="1.8.8",
         cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
         memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,

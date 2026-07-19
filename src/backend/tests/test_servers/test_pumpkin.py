@@ -106,7 +106,7 @@ def test_pumpkin_runtime_deployment_spec_001_nominal_logical_server_is_translate
         pytest.param(PUMPKIN_MINECRAFT_VERSION, id="pinned-version"),
     ],
 )
-def test_pumpkin_runtime_resolve_version_002_nominal_supported_request_is_pinned(
+async def test_pumpkin_runtime_resolve_version_002_nominal_supported_request_is_pinned(
     requested: str | None,
 ) -> None:
     """Test 002 - Nominal
@@ -117,13 +117,13 @@ def test_pumpkin_runtime_resolve_version_002_nominal_supported_request_is_pinned
     runtime: PumpkinRuntime = PumpkinRuntime()
 
     # Act
-    resolved: str = runtime.resolve_version(requested)
+    resolved: str = await runtime.resolve_version(requested)
 
     # Assert
     assert resolved == PUMPKIN_MINECRAFT_VERSION
 
 
-def test_pumpkin_runtime_resolve_version_003_anomalous_other_version_is_rejected() -> None:
+async def test_pumpkin_runtime_resolve_version_003_anomalous_other_version_is_rejected() -> None:
     """Test 003 - Anomalous
     Condition: The caller requests a Minecraft version other than the pinned one
     Result: ServerVersionUnsupportedError("pumpkin only supports Minecraft version 26.2")
@@ -136,7 +136,7 @@ def test_pumpkin_runtime_resolve_version_003_anomalous_other_version_is_rejected
         ServerVersionUnsupportedError,
         match=f"pumpkin only supports Minecraft version {PUMPKIN_MINECRAFT_VERSION}",
     ):
-        runtime.resolve_version("1.8.8")
+        await runtime.resolve_version("1.8.8")
 
 
 async def test_pumpkin_runtime_list_versions_004_nominal_pinned_version_is_listed() -> None:

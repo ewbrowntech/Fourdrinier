@@ -22,7 +22,7 @@ class _StubRuntimeAdapter:
         memory_bytes=2_147_483_648,
     )
 
-    def resolve_version(self, requested: str | None) -> str:
+    async def resolve_version(self, requested: str | None) -> str:
         """Fail if a registry test invokes version resolution."""
         raise AssertionError("registry tests must not call the runtime adapter")
 

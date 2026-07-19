@@ -13,6 +13,7 @@ from uuid import UUID
 class ServerRuntime(StrEnum):
     """Minecraft runtimes supported by Fourdrinier."""
 
+    PAPER = "paper"
     PUMPKIN = "pumpkin"
 
 

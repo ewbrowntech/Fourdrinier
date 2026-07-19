@@ -1,3 +1,5 @@
+import type { ServerRuntime } from './api'
+
 const BYTES_PER_GIBIBYTE = 1024 ** 3
 
 export interface ServerResourceValues {
@@ -10,14 +12,18 @@ export const DEFAULT_SERVER_RESOURCES: ServerResourceValues = {
   memoryGib: 2,
 }
 
-const RUNTIME_MINIMUM_RESOURCES: Record<'pumpkin', ServerResourceValues> = {
+const RUNTIME_MINIMUM_RESOURCES: Record<ServerRuntime, ServerResourceValues> = {
+  paper: {
+    cpuCores: 2,
+    memoryGib: 2,
+  },
   pumpkin: {
     cpuCores: 2,
     memoryGib: 2,
   },
 }
 
-export function minimumResourcesForRuntime(runtime: 'pumpkin'): ServerResourceValues {
+export function minimumResourcesForRuntime(runtime: ServerRuntime): ServerResourceValues {
   return RUNTIME_MINIMUM_RESOURCES[runtime]
 }
 

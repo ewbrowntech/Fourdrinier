@@ -25,7 +25,7 @@ class ServerCreate(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=255)
-    runtime: ServerRuntime = ServerRuntime.PUMPKIN
+    runtime: ServerRuntime
     minecraft_version: str | None = Field(default=None, min_length=1, max_length=32)
     cpu_millicores: int = Field(default=DEFAULT_SERVER_CPU_MILLICORES, gt=0)
     memory_bytes: int = Field(default=DEFAULT_SERVER_MEMORY_BYTES, gt=0)
