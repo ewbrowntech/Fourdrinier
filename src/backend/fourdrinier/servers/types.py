@@ -1,7 +1,7 @@
 """
 types.py
 
-Define provider-independent server value types and current Pumpkin defaults.
+Define provider-independent logical server value types.
 """
 
 from __future__ import annotations
@@ -25,13 +25,13 @@ class ServerDesiredState(StrEnum):
 
 type ServerId = UUID
 
-# Phase 1 freezes the version reported by the current upstream Pumpkin runtime.
-# The runtime catalog introduced in phase 2 will own version discovery.
-PUMPKIN_MINECRAFT_VERSION: str = "26.2"
+DEFAULT_SERVER_CPU_MILLICORES: int = 1_000
+DEFAULT_SERVER_MEMORY_BYTES: int = 2 * 1024 * 1024 * 1024
 
 
 __all__: list[str] = [
-    "PUMPKIN_MINECRAFT_VERSION",
+    "DEFAULT_SERVER_CPU_MILLICORES",
+    "DEFAULT_SERVER_MEMORY_BYTES",
     "ServerDesiredState",
     "ServerId",
     "ServerRuntime",

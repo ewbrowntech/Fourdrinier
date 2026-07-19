@@ -2,6 +2,12 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../api'
 import type { ServerRead } from '../api'
+import {
+  coresToMillicores,
+  DEFAULT_SERVER_RESOURCES,
+  gibibytesToBytes,
+  minimumResourcesForRuntime,
+} from '../serverResources'
 
 interface CreateServerFormProps {
   onCreated: (server: ServerRead) => void
@@ -9,7 +15,15 @@ interface CreateServerFormProps {
 }
 
 function CreateServerForm({ onCreated, onCancel }: CreateServerFormProps) {
+  const runtime = 'pumpkin' as const
+  const minimumResources = minimumResourcesForRuntime(runtime)
   const [name, setName] = useState('')
+  const [cpuCores, setCpuCores] = useState(
+    String(Math.max(DEFAULT_SERVER_RESOURCES.cpuCores, minimumResources.cpuCores)),
+  )
+  const [memoryGib, setMemoryGib] = useState(
+    String(Math.max(DEFAULT_SERVER_RESOURCES.memoryGib, minimumResources.memoryGib)),
+  )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -18,7 +32,12 @@ function CreateServerForm({ onCreated, onCancel }: CreateServerFormProps) {
     setSubmitting(true)
     setError(null)
     try {
-      const server = await api.createServer({ name: name.trim(), runtime: 'pumpkin' })
+      const server = await api.createServer({
+        name: name.trim(),
+        runtime,
+        cpu_millicores: coresToMillicores(Number(cpuCores)),
+        memory_bytes: gibibytesToBytes(Number(memoryGib)),
+      })
       onCreated(server)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create the server.')
@@ -49,7 +68,42 @@ function CreateServerForm({ onCreated, onCancel }: CreateServerFormProps) {
             autoFocus
           />
         </label>
+        <label className="field">
+          <span>CPU allocation</span>
+          <span className="input-with-unit">
+            <input
+              className="data"
+              type="number"
+              min={minimumResources.cpuCores}
+              step="0.001"
+              value={cpuCores}
+              onChange={(event) => setCpuCores(event.target.value)}
+              required
+            />
+            <span>cores</span>
+          </span>
+        </label>
+        <label className="field">
+          <span>Memory allocation</span>
+          <span className="input-with-unit">
+            <input
+              className="data"
+              type="number"
+              min={minimumResources.memoryGib}
+              step="0.001"
+              value={memoryGib}
+              onChange={(event) => setMemoryGib(event.target.value)}
+              required
+            />
+            <span>GiB</span>
+          </span>
+        </label>
       </div>
+
+      <p className="resource-note">
+        Pumpkin requires at least {minimumResources.cpuCores} cores and{' '}
+        {minimumResources.memoryGib} GiB of memory.
+      </p>
 
       <dl className="server-fixed-spec">
         <div>

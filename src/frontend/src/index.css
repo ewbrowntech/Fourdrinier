@@ -912,6 +912,27 @@ a.host-row:focus-visible {
   box-shadow: 0 0 0 3px var(--brand-tint);
 }
 
+.input-with-unit {
+  position: relative;
+  display: block;
+}
+
+.input-with-unit input {
+  width: 100%;
+  padding-right: 4.25rem;
+}
+
+.input-with-unit > span {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  color: var(--faint);
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
 .field select {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%235a6659' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -949,6 +970,42 @@ a.host-row:focus-visible {
   display: flex;
   gap: 0.6rem;
   margin-top: 1.4rem;
+}
+
+/* ---- Server resource allocation --------------------------------------- */
+
+.resource-panel {
+  position: relative;
+  margin-top: 1.4rem;
+  overflow: hidden;
+}
+
+.resource-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--brand);
+}
+
+.resource-panel .panel-head {
+  margin-bottom: 1rem;
+}
+
+.resource-generation {
+  color: var(--faint);
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+}
+
+.resource-note {
+  margin: 0.85rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.resource-panel .form-actions {
+  margin-top: 1rem;
 }
 
 /* ---- Keypair notice ---------------------------------------------------- */

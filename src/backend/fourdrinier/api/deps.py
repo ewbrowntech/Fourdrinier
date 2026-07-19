@@ -17,6 +17,8 @@ from fourdrinier.hosts.docker import DockerHostDriver
 from fourdrinier.hosts.drivers import HostDriverRegistry
 from fourdrinier.hosts.kubernetes import KubernetesHostDriver
 from fourdrinier.hosts.service import HostService
+from fourdrinier.servers.pumpkin import PumpkinRuntime
+from fourdrinier.servers.runtimes import RuntimeRegistry
 from fourdrinier.servers.service import ServerService
 
 
@@ -62,9 +64,10 @@ def get_server_service(session: DbSession) -> ServerService:
         session: Request-scoped database session.
 
     Returns:
-        A logical server service limited to local persistence operations.
+        A logical server service configured with every runtime adapter.
     """
-    service: ServerService = ServerService(session=session)
+    runtimes: RuntimeRegistry = RuntimeRegistry(PumpkinRuntime())
+    service: ServerService = ServerService(session=session, runtimes=runtimes)
     return service
 
 

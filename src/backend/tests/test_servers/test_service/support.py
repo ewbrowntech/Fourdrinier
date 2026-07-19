@@ -9,16 +9,20 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fourdrinier.db.models import Server
 from fourdrinier.servers import (
     PUMPKIN_MINECRAFT_VERSION,
+    PUMPKIN_MINIMUM_CPU_MILLICORES,
+    PUMPKIN_MINIMUM_MEMORY_BYTES,
     ServerDesiredState,
     ServerRuntime,
 )
+from fourdrinier.servers.deployment import ResourceAllocation
+from fourdrinier.servers.runtimes import RuntimeAdapter, RuntimeRegistry
 from fourdrinier.servers.service import ServerService
 
 SERVER_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000201")
@@ -35,15 +39,43 @@ class CrudMocks:
     update_server: AsyncMock
 
 
-def service_dependencies() -> tuple[ServerService, AsyncMock]:
+@dataclass(slots=True)
+class ServiceDependencies:
+    """Collect the direct dependencies used by a ServerService unit test."""
+
+    service: ServerService
+    session: AsyncMock
+    runtimes: Mock
+    runtime: Mock
+
+
+def service_dependencies() -> ServiceDependencies:
     """Build an isolated ServerService and its session dependency.
 
     Returns:
-        The service and request-scoped session test double.
+        The service and its request-scoped dependency test doubles.
     """
     session: AsyncMock = AsyncMock(spec=AsyncSession)
-    service: ServerService = ServerService(session=cast(AsyncSession, session))
-    return service, session
+    runtimes: Mock = Mock(spec=RuntimeRegistry)
+    runtime: Mock = Mock(spec=RuntimeAdapter)
+    runtime.runtime = ServerRuntime.PUMPKIN
+    runtime.minecraft_version = PUMPKIN_MINECRAFT_VERSION
+    runtime.minimum_resources = ResourceAllocation(
+        cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
+        memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
+    )
+    runtimes.for_runtime.return_value = runtime
+    service: ServerService = ServerService(
+        session=cast(AsyncSession, session),
+        runtimes=cast(RuntimeRegistry, runtimes),
+    )
+    dependencies: ServiceDependencies = ServiceDependencies(
+        service=service,
+        session=session,
+        runtimes=runtimes,
+        runtime=runtime,
+    )
+    return dependencies
 
 
 def server(name: str = "pumpkin-patch") -> Server:
@@ -60,6 +92,8 @@ def server(name: str = "pumpkin-patch") -> Server:
         name=name,
         runtime=ServerRuntime.PUMPKIN,
         minecraft_version=PUMPKIN_MINECRAFT_VERSION,
+        cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
+        memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
         desired_state=ServerDesiredState.STOPPED,
         spec_generation=1,
     )

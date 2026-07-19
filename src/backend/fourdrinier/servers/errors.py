@@ -19,4 +19,13 @@ class ServerNameConflictError(ServerError):
     """A logical server already uses the requested name."""
 
 
-__all__: list[str] = ["ServerError", "ServerNameConflictError", "ServerNotFoundError"]
+class ServerResourceMinimumError(ServerError):
+    """A resource allocation is below the selected runtime's minimum."""
+
+
+__all__: list[str] = [
+    "ServerError",
+    "ServerNameConflictError",
+    "ServerNotFoundError",
+    "ServerResourceMinimumError",
+]

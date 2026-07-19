@@ -15,7 +15,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from fourdrinier.db.models import Server
-from fourdrinier.servers import PUMPKIN_MINECRAFT_VERSION
+from fourdrinier.servers import (
+    PUMPKIN_MINECRAFT_VERSION,
+    PUMPKIN_MINIMUM_CPU_MILLICORES,
+    PUMPKIN_MINIMUM_MEMORY_BYTES,
+)
 
 
 @pytest.mark.parametrize(
@@ -24,6 +28,8 @@ from fourdrinier.servers import PUMPKIN_MINECRAFT_VERSION
         pytest.param({"runtime": "paper"}, id="runtime"),
         pytest.param({"desired_state": "paused"}, id="desired-state"),
         pytest.param({"spec_generation": 0}, id="spec-generation"),
+        pytest.param({"cpu_millicores": 0}, id="cpu-allocation"),
+        pytest.param({"memory_bytes": 0}, id="memory-allocation"),
     ],
 )
 async def test_server_constraints_001_anomalous_invalid_persisted_value_is_rejected(
@@ -31,7 +37,7 @@ async def test_server_constraints_001_anomalous_invalid_persisted_value_is_rejec
     overrides: dict[str, object],
 ) -> None:
     """Test 001 - Anomalous
-    Condition: A direct insert violates a runtime, desired-state, or generation invariant
+    Condition: A direct insert violates a runtime, state, generation, or resource invariant
     Result: IntegrityError is raised and no logical server row is persisted
     """
     # Arrange
@@ -42,15 +48,19 @@ async def test_server_constraints_001_anomalous_invalid_persisted_value_is_rejec
         "name": "invalid-server",
         "runtime": "pumpkin",
         "minecraft_version": PUMPKIN_MINECRAFT_VERSION,
+        "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
+        "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
         "desired_state": "stopped",
         "spec_generation": 1,
         **overrides,
     }
     statement: str = """
         INSERT INTO servers (
-            id, name, runtime, minecraft_version, desired_state, spec_generation
+            id, name, runtime, minecraft_version, cpu_millicores, memory_bytes,
+            desired_state, spec_generation
         ) VALUES (
-            :id, :name, :runtime, :minecraft_version, :desired_state, :spec_generation
+            :id, :name, :runtime, :minecraft_version, :cpu_millicores, :memory_bytes,
+            :desired_state, :spec_generation
         )
     """
 

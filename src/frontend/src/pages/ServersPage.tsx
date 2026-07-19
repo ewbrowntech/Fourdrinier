@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { api } from '../api'
 import type { ServerRead } from '../api'
+import { formatCpu, formatMemory } from '../serverResources'
 
 function ServersPage() {
   const [servers, setServers] = useState<ServerRead[] | null>(null)
@@ -75,7 +76,8 @@ function ServersPage() {
                   <span className="pill unassigned">Not deployed</span>
                 </span>
                 <span className="server-meta">
-                  Minecraft {server.minecraft_version} · generation {server.spec_generation}
+                  Minecraft {server.minecraft_version} · {formatCpu(server.cpu_millicores)} /{' '}
+                  {formatMemory(server.memory_bytes)} · generation {server.spec_generation}
                 </span>
                 <span className="host-chevron" aria-hidden="true">→</span>
               </Link>

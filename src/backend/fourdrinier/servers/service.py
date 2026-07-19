@@ -1,7 +1,7 @@
 """
 service.py
 
-Coordinate logical server persistence without provisioning remote resources.
+Coordinate logical server persistence and runtime deployment translation.
 """
 
 from __future__ import annotations
@@ -14,9 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fourdrinier.db.crud import servers as servers_crud
 from fourdrinier.db.models import Server
 from fourdrinier.schemas.server import ServerCreate, ServerUpdate
-from fourdrinier.servers.errors import ServerNameConflictError, ServerNotFoundError
+from fourdrinier.servers.deployment import DeploymentSpec
+from fourdrinier.servers.errors import (
+    ServerNameConflictError,
+    ServerNotFoundError,
+    ServerResourceMinimumError,
+)
+from fourdrinier.servers.runtimes import RuntimeAdapter, RuntimeRegistry
 from fourdrinier.servers.types import (
-    PUMPKIN_MINECRAFT_VERSION,
     ServerDesiredState,
     ServerId,
     ServerRuntime,
@@ -29,16 +34,35 @@ def _is_server_name_conflict(exc: IntegrityError) -> bool:
     return "uq_servers_name" in message or "unique constraint failed: servers.name" in message
 
 
-class ServerService:
-    """Implement logical server use cases within the local database boundary."""
+def _validate_resource_minimums(
+    runtime: RuntimeAdapter,
+    cpu_millicores: int,
+    memory_bytes: int,
+) -> None:
+    minimum_cpu: int = runtime.minimum_resources.cpu_millicores
+    if cpu_millicores < minimum_cpu:
+        raise ServerResourceMinimumError(
+            f"{runtime.runtime.value} requires at least {minimum_cpu} CPU millicores"
+        )
+    minimum_memory: int = runtime.minimum_resources.memory_bytes
+    if memory_bytes < minimum_memory:
+        raise ServerResourceMinimumError(
+            f"{runtime.runtime.value} requires at least {minimum_memory} memory bytes"
+        )
 
-    def __init__(self, session: AsyncSession) -> None:
-        """Initialize the service with its request-scoped transaction.
+
+class ServerService:
+    """Implement logical server use cases across persistence and runtime boundaries."""
+
+    def __init__(self, session: AsyncSession, runtimes: RuntimeRegistry) -> None:
+        """Initialize the service with persistence and runtime dependencies.
 
         Args:
             session: Session that owns transactions for server write operations.
+            runtimes: Registry used to select runtime deployment adapters.
         """
         self._session: AsyncSession = session
+        self._runtimes: RuntimeRegistry = runtimes
 
     async def _get_required(self, server_id: ServerId) -> Server:
         server: Server | None = await servers_crud.get_server(self._session, server_id)
@@ -57,11 +81,21 @@ class ServerService:
 
         Raises:
             ServerNameConflictError: If the requested server name already exists.
+            ServerResourceMinimumError: If an allocation is below its runtime minimum.
         """
+        runtime_type: ServerRuntime = ServerRuntime(request.runtime)
+        runtime: RuntimeAdapter = self._runtimes.for_runtime(runtime_type)
+        _validate_resource_minimums(
+            runtime,
+            request.cpu_millicores,
+            request.memory_bytes,
+        )
         server: Server = Server(
             name=request.name,
-            runtime=ServerRuntime.PUMPKIN,
-            minecraft_version=PUMPKIN_MINECRAFT_VERSION,
+            runtime=runtime_type,
+            minecraft_version=runtime.minecraft_version,
+            cpu_millicores=request.cpu_millicores,
+            memory_bytes=request.memory_bytes,
             desired_state=ServerDesiredState.STOPPED,
             spec_generation=1,
         )
@@ -104,8 +138,25 @@ class ServerService:
         server: Server = await self._get_required(server_id)
         return server
 
+    async def deployment_spec(self, server_id: ServerId) -> DeploymentSpec:
+        """Translate a saved logical server into a deployment specification.
+
+        Args:
+            server_id: Identifier of the logical server to translate.
+
+        Returns:
+            A provider-neutral deployment specification from its runtime adapter.
+
+        Raises:
+            ServerNotFoundError: If the requested server does not exist.
+        """
+        server: Server = await self._get_required(server_id)
+        runtime: RuntimeAdapter = self._runtimes.for_runtime(server.runtime)
+        specification: DeploymentSpec = runtime.deployment_spec(server)
+        return specification
+
     async def update(self, server_id: ServerId, request: ServerUpdate) -> Server:
-        """Update the editable metadata of a logical server.
+        """Update editable metadata and resource allocation for a logical server.
 
         Args:
             server_id: Identifier of the server to modify.
@@ -117,11 +168,31 @@ class ServerService:
         Raises:
             ServerNotFoundError: If the requested server does not exist.
             ServerNameConflictError: If the requested server name already exists.
+            ServerResourceMinimumError: If an allocation is below its runtime minimum.
         """
         try:
             server: Server = await self._get_required(server_id)
+            resources_supplied: bool = bool(
+                {"cpu_millicores", "memory_bytes"} & request.model_fields_set
+            )
+            resources_changed: bool = False
+            cpu_millicores: int = server.cpu_millicores
+            if "cpu_millicores" in request.model_fields_set:
+                cpu_millicores = cast(int, request.cpu_millicores)
+                resources_changed = resources_changed or server.cpu_millicores != cpu_millicores
+            memory_bytes: int = server.memory_bytes
+            if "memory_bytes" in request.model_fields_set:
+                memory_bytes = cast(int, request.memory_bytes)
+                resources_changed = resources_changed or server.memory_bytes != memory_bytes
+            if resources_supplied:
+                runtime: RuntimeAdapter = self._runtimes.for_runtime(server.runtime)
+                _validate_resource_minimums(runtime, cpu_millicores, memory_bytes)
             if "name" in request.model_fields_set:
                 server.name = cast(str, request.name)
+            if resources_changed:
+                server.cpu_millicores = cpu_millicores
+                server.memory_bytes = memory_bytes
+                server.spec_generation += 1
             updated: Server = await servers_crud.update_server(self._session, server)
             await self._session.commit()
         except IntegrityError as exc:

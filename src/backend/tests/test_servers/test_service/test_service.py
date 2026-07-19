@@ -6,7 +6,8 @@ Unit tests for logical server persistence orchestration.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from typing import cast
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -14,16 +15,20 @@ from sqlalchemy.exc import IntegrityError
 from fourdrinier.db.models import Server
 from fourdrinier.schemas.server import ServerCreate, ServerUpdate
 from fourdrinier.servers import (
-    PUMPKIN_MINECRAFT_VERSION,
+    PUMPKIN_MINIMUM_CPU_MILLICORES,
+    PUMPKIN_MINIMUM_MEMORY_BYTES,
     ServerDesiredState,
     ServerNameConflictError,
     ServerNotFoundError,
+    ServerResourceMinimumError,
     ServerRuntime,
 )
+from fourdrinier.servers.deployment import DeploymentSpec
 from fourdrinier.servers.service import ServerService
 from tests.test_servers.test_service.support import (
     SERVER_ID,
     CrudMocks,
+    ServiceDependencies,
     server,
     service_dependencies,
 )
@@ -37,10 +42,16 @@ async def test_server_service_create_001_nominal_fixed_configuration_is_committe
     Result: A stopped generation-one configuration is persisted and committed
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
-    request: ServerCreate = ServerCreate(name="lantern-grove")
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
+    resolved_version: str = "runtime-resolved-version"
+    dependencies.runtime.minecraft_version = resolved_version
+    request: ServerCreate = ServerCreate(
+        name="lantern-grove",
+        cpu_millicores=2_500,
+        memory_bytes=3_221_225_472,
+    )
     created: Server = server(request.name)
     crud.create_server.return_value = created
 
@@ -52,9 +63,12 @@ async def test_server_service_create_001_nominal_fixed_configuration_is_committe
     assert result is created
     assert persisted.name == request.name
     assert persisted.runtime is ServerRuntime.PUMPKIN
-    assert persisted.minecraft_version == PUMPKIN_MINECRAFT_VERSION
+    assert persisted.minecraft_version == resolved_version
+    assert persisted.cpu_millicores == request.cpu_millicores
+    assert persisted.memory_bytes == request.memory_bytes
     assert persisted.desired_state is ServerDesiredState.STOPPED
     assert persisted.spec_generation == 1
+    dependencies.runtimes.for_runtime.assert_called_once_with(ServerRuntime.PUMPKIN)
     crud.create_server.assert_awaited_once_with(session, persisted)
     session.commit.assert_awaited_once_with()
     session.rollback.assert_not_awaited()
@@ -90,10 +104,14 @@ async def test_server_service_create_002_anomalous_failure_is_rolled_back(
     Result: A typed or original error is raised after the transaction rolls back
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
-    request: ServerCreate = ServerCreate(name="conflicted-world")
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
+    request: ServerCreate = ServerCreate(
+        name="conflicted-world",
+        cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
+        memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
+    )
     crud.create_server.side_effect = failure
 
     # Act
@@ -118,9 +136,9 @@ async def test_server_service_list_003_nominal_ordered_servers_are_forwarded(
     Result: The service returns that collection without opening a write transaction
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
     persisted: list[Server] = [server()]
     crud.list_servers.return_value = persisted
 
@@ -142,9 +160,9 @@ async def test_server_service_get_004_nominal_server_is_returned(
     Result: The service returns the matching logical server
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
     persisted: Server = server()
     crud.get_server.return_value = persisted
 
@@ -164,9 +182,9 @@ async def test_server_service_get_005_anomalous_server_is_missing(
     Result: ServerNotFoundError is raised with the requested identifier
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
     crud.get_server.return_value = None
 
     # Act
@@ -177,26 +195,152 @@ async def test_server_service_get_005_anomalous_server_is_missing(
     crud.get_server.assert_awaited_once_with(session, SERVER_ID)
 
 
+async def test_server_service_deployment_spec_010_nominal_runtime_translates_server(
+    crud: CrudMocks,
+) -> None:
+    """Test 010 - Nominal
+    Condition: A saved server has a registered runtime adapter
+    Result: The service returns the adapter's provider-neutral deployment specification
+    """
+    # Arrange
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
+    persisted: Server = server()
+    specification: DeploymentSpec = cast(DeploymentSpec, Mock(spec=DeploymentSpec))
+    crud.get_server.return_value = persisted
+    dependencies.runtime.deployment_spec.return_value = specification
+
+    # Act
+    result: DeploymentSpec = await service.deployment_spec(SERVER_ID)
+
+    # Assert
+    assert result is specification
+    crud.get_server.assert_awaited_once_with(session, SERVER_ID)
+    dependencies.runtimes.for_runtime.assert_called_once_with(ServerRuntime.PUMPKIN)
+    dependencies.runtime.deployment_spec.assert_called_once_with(persisted)
+
+
 @pytest.mark.parametrize(
-    ("update_request", "expected_name"),
+    ("create_request", "expected_message"),
     [
-        pytest.param(ServerUpdate(name="renamed-world"), "renamed-world", id="rename"),
-        pytest.param(ServerUpdate(), "pumpkin-patch", id="no-op"),
+        pytest.param(
+            ServerCreate(
+                name="small-cpu",
+                cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES - 1,
+                memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
+            ),
+            "pumpkin requires at least 2000 CPU millicores",
+            id="cpu",
+        ),
+        pytest.param(
+            ServerCreate(
+                name="small-memory",
+                cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
+                memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES - 1,
+            ),
+            "pumpkin requires at least 2147483648 memory bytes",
+            id="memory",
+        ),
+    ],
+)
+async def test_server_service_create_011_anomalous_runtime_minimum_is_not_met(
+    create_request: ServerCreate,
+    expected_message: str,
+    crud: CrudMocks,
+) -> None:
+    """Test 011 - Anomalous
+    Condition: A creation request is below the selected runtime's CPU or memory minimum
+    Result: ServerResourceMinimumError is raised without opening a write transaction
+    """
+    # Arrange
+    dependencies: ServiceDependencies = service_dependencies()
+
+    # Act
+    with pytest.raises(ServerResourceMinimumError, match=expected_message):
+        await dependencies.service.create(create_request)
+
+    # Assert
+    crud.create_server.assert_not_awaited()
+    dependencies.session.commit.assert_not_awaited()
+    dependencies.session.rollback.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    (
+        "update_request",
+        "expected_name",
+        "expected_cpu_millicores",
+        "expected_memory_bytes",
+        "expected_generation",
+    ),
+    [
+        pytest.param(
+            ServerUpdate(name="renamed-world"),
+            "renamed-world",
+            2_000,
+            2_147_483_648,
+            1,
+            id="rename",
+        ),
+        pytest.param(
+            ServerUpdate(),
+            "pumpkin-patch",
+            2_000,
+            2_147_483_648,
+            1,
+            id="no-op",
+        ),
+        pytest.param(
+            ServerUpdate(cpu_millicores=2_500),
+            "pumpkin-patch",
+            2_500,
+            2_147_483_648,
+            2,
+            id="cpu",
+        ),
+        pytest.param(
+            ServerUpdate(memory_bytes=3_221_225_472),
+            "pumpkin-patch",
+            2_000,
+            3_221_225_472,
+            2,
+            id="memory",
+        ),
+        pytest.param(
+            ServerUpdate(cpu_millicores=2_500, memory_bytes=3_221_225_472),
+            "pumpkin-patch",
+            2_500,
+            3_221_225_472,
+            2,
+            id="cpu-and-memory",
+        ),
+        pytest.param(
+            ServerUpdate(cpu_millicores=2_000, memory_bytes=2_147_483_648),
+            "pumpkin-patch",
+            2_000,
+            2_147_483_648,
+            1,
+            id="unchanged-resources",
+        ),
     ],
 )
 async def test_server_service_update_006_nominal_metadata_update_is_committed(
     update_request: ServerUpdate,
     expected_name: str,
+    expected_cpu_millicores: int,
+    expected_memory_bytes: int,
+    expected_generation: int,
     crud: CrudMocks,
 ) -> None:
     """Test 006 - Nominal
-    Condition: A partial metadata update changes the name or contains no fields
-    Result: Editable metadata is persisted without changing deployment generation
+    Condition: A partial update changes metadata, resources, both resources, or nothing
+    Result: Resource changes increment generation once while metadata and no-ops do not
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
     persisted: Server = server()
     crud.get_server.return_value = persisted
     crud.update_server.return_value = persisted
@@ -207,7 +351,9 @@ async def test_server_service_update_006_nominal_metadata_update_is_committed(
     # Assert
     assert result is persisted
     assert persisted.name == expected_name
-    assert persisted.spec_generation == 1
+    assert persisted.cpu_millicores == expected_cpu_millicores
+    assert persisted.memory_bytes == expected_memory_bytes
+    assert persisted.spec_generation == expected_generation
     crud.update_server.assert_awaited_once_with(session, persisted)
     session.commit.assert_awaited_once_with()
     session.rollback.assert_not_awaited()
@@ -247,9 +393,9 @@ async def test_server_service_update_007_anomalous_failure_is_rolled_back(
     Result: The transaction rolls back and exposes a stable or original failure
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
     request: ServerUpdate = ServerUpdate(name="rename-target")
     crud.get_server.return_value = persisted
     crud.update_server.side_effect = failure
@@ -263,6 +409,48 @@ async def test_server_service_update_007_anomalous_failure_is_rolled_back(
     session.rollback.assert_awaited_once_with()
 
 
+@pytest.mark.parametrize(
+    ("update_request", "expected_message"),
+    [
+        pytest.param(
+            ServerUpdate(cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES - 1),
+            "pumpkin requires at least 2000 CPU millicores",
+            id="cpu",
+        ),
+        pytest.param(
+            ServerUpdate(memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES - 1),
+            "pumpkin requires at least 2147483648 memory bytes",
+            id="memory",
+        ),
+    ],
+)
+async def test_server_service_update_012_anomalous_runtime_minimum_is_not_met(
+    update_request: ServerUpdate,
+    expected_message: str,
+    crud: CrudMocks,
+) -> None:
+    """Test 012 - Anomalous
+    Condition: A resource update would put the server below its runtime minimum
+    Result: ServerResourceMinimumError is raised and the persisted allocation is unchanged
+    """
+    # Arrange
+    dependencies: ServiceDependencies = service_dependencies()
+    persisted: Server = server()
+    crud.get_server.return_value = persisted
+
+    # Act
+    with pytest.raises(ServerResourceMinimumError, match=expected_message):
+        await dependencies.service.update(SERVER_ID, update_request)
+
+    # Assert
+    assert persisted.cpu_millicores == PUMPKIN_MINIMUM_CPU_MILLICORES
+    assert persisted.memory_bytes == PUMPKIN_MINIMUM_MEMORY_BYTES
+    assert persisted.spec_generation == 1
+    crud.update_server.assert_not_awaited()
+    dependencies.session.commit.assert_not_awaited()
+    dependencies.session.rollback.assert_awaited_once_with()
+
+
 async def test_server_service_delete_008_nominal_server_is_deleted(
     crud: CrudMocks,
 ) -> None:
@@ -271,9 +459,9 @@ async def test_server_service_delete_008_nominal_server_is_deleted(
     Result: The server is deleted and the transaction is committed
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
     persisted: Server = server()
     crud.get_server.return_value = persisted
 
@@ -294,9 +482,9 @@ async def test_server_service_delete_009_anomalous_server_is_missing(
     Result: ServerNotFoundError is raised and the transaction is rolled back
     """
     # Arrange
-    service: ServerService
-    session: AsyncMock
-    service, session = service_dependencies()
+    dependencies: ServiceDependencies = service_dependencies()
+    service: ServerService = dependencies.service
+    session: AsyncMock = dependencies.session
     crud.get_server.return_value = None
 
     # Act

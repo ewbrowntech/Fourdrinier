@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     Enum,
@@ -23,7 +24,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fourdrinier.db.base import Base
-from fourdrinier.servers.types import ServerDesiredState, ServerRuntime
+from fourdrinier.servers.types import (
+    DEFAULT_SERVER_CPU_MILLICORES,
+    DEFAULT_SERVER_MEMORY_BYTES,
+    ServerDesiredState,
+    ServerRuntime,
+)
 
 
 def _enum_values(enum_cls: type[ServerRuntime] | type[ServerDesiredState]) -> list[str]:
@@ -36,6 +42,14 @@ class Server(Base):
     __tablename__ = "servers"
     __table_args__ = (
         UniqueConstraint("name", name="uq_servers_name"),
+        CheckConstraint(
+            "cpu_millicores > 0",
+            name="ck_servers_cpu_millicores_positive",
+        ),
+        CheckConstraint(
+            "memory_bytes > 0",
+            name="ck_servers_memory_bytes_positive",
+        ),
         CheckConstraint("spec_generation >= 1", name="ck_servers_spec_generation_positive"),
     )
 
@@ -60,6 +74,18 @@ class Server(Base):
         server_default=text("'pumpkin'"),
     )
     minecraft_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    cpu_millicores: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_SERVER_CPU_MILLICORES,
+        server_default=text(str(DEFAULT_SERVER_CPU_MILLICORES)),
+    )
+    memory_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=DEFAULT_SERVER_MEMORY_BYTES,
+        server_default=text(str(DEFAULT_SERVER_MEMORY_BYTES)),
+    )
     desired_state: Mapped[ServerDesiredState] = mapped_column(
         Enum(
             ServerDesiredState,

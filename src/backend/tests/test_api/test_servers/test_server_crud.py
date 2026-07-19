@@ -11,7 +11,11 @@ from typing import Any
 import httpx
 import pytest
 
-from fourdrinier.servers import PUMPKIN_MINECRAFT_VERSION
+from fourdrinier.servers import (
+    PUMPKIN_MINECRAFT_VERSION,
+    PUMPKIN_MINIMUM_CPU_MILLICORES,
+    PUMPKIN_MINIMUM_MEMORY_BYTES,
+)
 from tests.test_api.types import JsonObject, ServerFactory
 
 
@@ -23,7 +27,12 @@ async def test_create_server_001_nominal_pumpkin_configuration_is_saved(
     Result: A stopped generation-one configuration is returned without host data
     """
     # Arrange
-    payload: JsonObject = {"name": "lantern-grove", "runtime": "pumpkin"}
+    payload: JsonObject = {
+        "name": "lantern-grove",
+        "runtime": "pumpkin",
+        "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
+        "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
+    }
 
     # Act
     response: httpx.Response = await client.post("/api/v1/servers", json=payload)
@@ -34,6 +43,8 @@ async def test_create_server_001_nominal_pumpkin_configuration_is_saved(
     assert server["name"] == "lantern-grove"
     assert server["runtime"] == "pumpkin"
     assert server["minecraft_version"] == PUMPKIN_MINECRAFT_VERSION
+    assert server["cpu_millicores"] == PUMPKIN_MINIMUM_CPU_MILLICORES
+    assert server["memory_bytes"] == PUMPKIN_MINIMUM_MEMORY_BYTES
     assert server["desired_state"] == "stopped"
     assert server["spec_generation"] == 1
     assert server["created_at"] is not None
@@ -48,6 +59,17 @@ async def test_create_server_001_nominal_pumpkin_configuration_is_saved(
         pytest.param({"name": ""}, id="empty-name"),
         pytest.param({"name": "paper-world", "runtime": "paper"}, id="unsupported-runtime"),
         pytest.param({"name": "eager-world", "desired_state": "running"}, id="lifecycle-state"),
+        pytest.param({"name": "no-cpu", "cpu_millicores": 0}, id="zero-cpu"),
+        pytest.param({"name": "no-memory", "memory_bytes": 0}, id="zero-memory"),
+        pytest.param({"name": "default-pumpkin"}, id="default-below-runtime-minimum"),
+        pytest.param(
+            {
+                "name": "small-pumpkin",
+                "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES - 1,
+                "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
+            },
+            id="runtime-cpu-minimum",
+        ),
     ],
 )
 async def test_create_server_002_anomalous_payload_cannot_override_fixed_configuration(
@@ -78,7 +100,11 @@ async def test_create_server_003_anomalous_name_already_exists(
     """
     # Arrange
     original: JsonObject = await server_factory(name="shared-world")
-    payload: JsonObject = {"name": "shared-world"}
+    payload: JsonObject = {
+        "name": "shared-world",
+        "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
+        "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
+    }
 
     # Act
     response: httpx.Response = await client.post("/api/v1/servers", json=payload)
@@ -172,6 +198,8 @@ async def test_update_server_007_nominal_name_changes_without_new_spec_generatio
     assert updated["name"] == "after-rename"
     assert updated["runtime"] == created["runtime"]
     assert updated["minecraft_version"] == created["minecraft_version"]
+    assert updated["cpu_millicores"] == created["cpu_millicores"]
+    assert updated["memory_bytes"] == created["memory_bytes"]
     assert updated["desired_state"] == created["desired_state"]
     assert updated["spec_generation"] == created["spec_generation"]
     assert updated["updated_at"] >= created["updated_at"]
@@ -208,6 +236,9 @@ async def test_update_server_008_nominal_empty_patch_preserves_configuration(
         pytest.param("missing", 404, id="missing"),
         pytest.param("duplicate", 409, id="duplicate"),
         pytest.param("null-name", 422, id="null-name"),
+        pytest.param("null-cpu", 422, id="null-cpu"),
+        pytest.param("negative-memory", 422, id="negative-memory"),
+        pytest.param("below-runtime-memory", 422, id="below-runtime-memory"),
         pytest.param("immutable-runtime", 422, id="immutable-runtime"),
     ],
 )
@@ -232,6 +263,12 @@ async def test_update_server_009_anomalous_invalid_update_is_rejected(
         payload = {"name": "name-in-use"}
     elif scenario == "null-name":
         payload = {"name": None}
+    elif scenario == "null-cpu":
+        payload = {"cpu_millicores": None}
+    elif scenario == "negative-memory":
+        payload = {"memory_bytes": -1}
+    elif scenario == "below-runtime-memory":
+        payload = {"memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES - 1}
     elif scenario == "immutable-runtime":
         payload = {"runtime": "pumpkin"}
 
@@ -243,6 +280,35 @@ async def test_update_server_009_anomalous_invalid_update_is_rejected(
 
     # Assert
     assert response.status_code == expected_status
+
+
+async def test_update_server_012_nominal_resources_advance_specification_generation(
+    client: httpx.AsyncClient,
+    server_factory: ServerFactory,
+) -> None:
+    """Test 012 - Nominal
+    Condition: A saved server receives new CPU and memory allocations
+    Result: Both allocations persist and specification generation advances once
+    """
+    # Arrange
+    created: JsonObject = await server_factory(name="resized-world")
+    payload: JsonObject = {
+        "cpu_millicores": 2_500,
+        "memory_bytes": 3_221_225_472,
+    }
+
+    # Act
+    response: httpx.Response = await client.patch(
+        f"/api/v1/servers/{created['id']}",
+        json=payload,
+    )
+
+    # Assert
+    updated: JsonObject = response.json()
+    assert response.status_code == 200
+    assert updated["cpu_millicores"] == 2_500
+    assert updated["memory_bytes"] == 3_221_225_472
+    assert updated["spec_generation"] == created["spec_generation"] + 1
 
 
 async def test_delete_server_010_nominal_saved_configuration_exists(

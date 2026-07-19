@@ -105,6 +105,8 @@ export interface ServerRead {
   name: string
   runtime: 'pumpkin'
   minecraft_version: string
+  cpu_millicores: number
+  memory_bytes: number
   desired_state: 'running' | 'stopped'
   spec_generation: number
   created_at: string
@@ -114,10 +116,14 @@ export interface ServerRead {
 export interface ServerCreate {
   name: string
   runtime?: 'pumpkin'
+  cpu_millicores?: number
+  memory_bytes?: number
 }
 
 export interface ServerUpdate {
   name?: string
+  cpu_millicores?: number
+  memory_bytes?: number
 }
 
 export interface KeypairRead {

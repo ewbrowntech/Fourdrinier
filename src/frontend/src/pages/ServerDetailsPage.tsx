@@ -3,6 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { api } from '../api'
 import type { ServerRead } from '../api'
 import ConfirmDialog from '../components/ConfirmDialog'
+import ServerResourcesForm from '../components/ServerResourcesForm'
 import { TrashIcon } from '../components/icons'
 
 interface ServerDetailsPageProps {
@@ -105,6 +106,8 @@ function ServerDetailsPage({ serverId }: ServerDetailsPageProps) {
       {loadError && (
         <p className="board-error" role="alert">{loadError}</p>
       )}
+
+      <ServerResourcesForm server={server} onUpdated={setServer} />
 
       <dl className="detail-grid">
         <div className="detail-item">

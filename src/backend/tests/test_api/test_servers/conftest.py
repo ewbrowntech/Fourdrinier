@@ -11,6 +11,10 @@ from typing import Any
 import httpx
 import pytest
 
+from fourdrinier.servers import (
+    PUMPKIN_MINIMUM_CPU_MILLICORES,
+    PUMPKIN_MINIMUM_MEMORY_BYTES,
+)
 from tests.test_api.types import JsonObject, ServerFactory
 
 
@@ -26,7 +30,12 @@ def server_factory(client: httpx.AsyncClient) -> ServerFactory:
     """
 
     async def create_server(**overrides: Any) -> JsonObject:
-        payload: JsonObject = {"name": "pumpkin-patch", **overrides}
+        payload: JsonObject = {
+            "name": "pumpkin-patch",
+            "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
+            "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
+            **overrides,
+        }
         response: httpx.Response = await client.post("/api/v1/servers", json=payload)
         assert response.status_code == 201, response.text
         return response.json()
