@@ -1,0 +1,21 @@
+meta {
+  name: Delete Docker host
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/hosts/{{dockerHostId}}
+  body: none
+  auth: none
+}
+
+params:path {
+  dockerHostId: {{dockerHostId}}
+}
+
+tests {
+  test("should delete docker host", function() {
+    expect(res.status).to.equal(204);
+  });
+}

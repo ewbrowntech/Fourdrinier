@@ -1,0 +1,24 @@
+meta {
+  name: Ping Docker host
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/hosts/{{dockerHostId}}/ping
+  body: none
+  auth: none
+}
+
+params:path {
+  dockerHostId: {{dockerHostId}}
+}
+
+tests {
+  test("should ping docker host", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.status).to.equal("ok");
+    expect(res.body).to.have.property("docker_version");
+    expect(res.body.host_key).to.have.property("fingerprint");
+  });
+}

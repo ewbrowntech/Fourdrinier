@@ -1,1 +1,5 @@
 .env
+*.db
+*.db-journal
+data/
+tmp

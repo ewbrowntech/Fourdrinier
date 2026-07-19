@@ -1,0 +1,77 @@
+# Fourdrinier cluster bootstrap
+#
+# Creates the namespace, ServiceAccount, long-lived token, and namespace-scoped
+# RBAC that fourdrinier uses to manage workloads on this cluster.
+#
+#   kubectl apply -f deploy/kubernetes/fourdrinier-bootstrap.yaml
+#
+# Then extract the credentials to register the host (see
+# docs/host-architecture.md):
+#
+#   kubectl -n fourdrinier get secret fourdrinier-token -o jsonpath='{.data.token}' | base64 -d
+#   kubectl -n fourdrinier get secret fourdrinier-token -o jsonpath='{.data.ca\.crt}' | base64 -d
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fourdrinier
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fourdrinier
+  namespace: fourdrinier
+---
+# A long-lived token bound to the ServiceAccount. The token controller
+# populates .data.token and .data.ca\.crt shortly after creation.
+# Revoke access at any time by deleting this Secret.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fourdrinier-token
+  namespace: fourdrinier
+  annotations:
+    kubernetes.io/service-account.name: fourdrinier
+type: kubernetes.io/service-account-token
+---
+# Namespace-scoped permissions only — fourdrinier never needs cluster-level
+# access. The rule set covers deploying and operating game-server workloads:
+# workloads + their exposure (services), storage (pvcs), config (configmaps/
+# secrets), and pod-level operations (restart, logs, console exec, events).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fourdrinier
+  namespace: fourdrinier
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "persistentvolumeclaims", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fourdrinier
+  namespace: fourdrinier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fourdrinier
+subjects:
+  - kind: ServiceAccount
+    name: fourdrinier
+    namespace: fourdrinier

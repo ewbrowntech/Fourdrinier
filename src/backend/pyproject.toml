@@ -8,14 +8,70 @@ dependencies = [
     "uvicorn[standard]>=0.34.0",
     "gunicorn>=23.0.0",
     "pydantic-settings>=2.7.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.22.1",
+    "alembic>=1.18.5",
+    # docker SSH transport subclasses docker-py internals (SSHHTTPAdapter);
+    # keep the major version pinned and re-verify on upgrade.
+    "docker>=7.1,<8",
+    "paramiko>=3.4",
+    "cryptography>=42",
+    "httpx>=0.28.0",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.21",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E4",   # pycodestyle import errors
+    "E7",   # pycodestyle statement errors
+    "E9",   # pycodestyle runtime errors
+    "F",    # Pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C90",  # McCabe complexity
+    "UP",   # pyupgrade
+    "RUF",  # Ruff-specific rules
+]
+
+ignore = [
+    "B008", # function calls in argument defaults (necessary for FastAPI Depends)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# These aliases must remain transparent runtime assignments for ORM and API consumers.
+"fourdrinier/hosts/types.py" = ["UP040"]
+# Migrating this persisted enum to StrEnum could change its string representation.
+"fourdrinier/db/models/ssh_keypair.py" = ["UP042"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.coverage.run]
+data_file = "tests/.coverage"
+branch = true
+omit = ["tests/*"]
+
+[tool.coverage.html]
+directory = "tests/coverage/html"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--cov=fourdrinier"
 
 [build-system]
 requires = ["hatchling"]

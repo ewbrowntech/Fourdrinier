@@ -1,0 +1,320 @@
+"""
+service.py
+
+Coordinate provider-neutral host persistence and remote operations.
+"""
+
+from __future__ import annotations
+
+from typing import cast
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from fourdrinier.core.secrets import PlaintextSecret, SecretEncryptor
+from fourdrinier.db.crud import hosts as hosts_crud
+from fourdrinier.db.crud import ssh_keypairs as keypairs_crud
+from fourdrinier.db.models import (
+    DockerHostDetails,
+    Host,
+    KubernetesHostDetails,
+    SSHKeypair,
+)
+from fourdrinier.hosts.drivers import HostDriver, HostDriverPingResult, HostDriverRegistry
+from fourdrinier.hosts.errors import (
+    HostKeypairNotFoundError,
+    HostNameConflictError,
+    HostNotFoundError,
+    HostTypeChangeError,
+)
+from fourdrinier.hosts.types import HostId, HostType, SSHKeypairId
+from fourdrinier.schemas.host import (
+    DockerHostCreate,
+    DockerHostUpdate,
+    HostCreate,
+    HostUpdate,
+    HostUpdateBase,
+    KubernetesHostUpdate,
+)
+
+
+def _is_host_name_conflict(exc: IntegrityError) -> bool:
+    original: BaseException = exc.orig
+    message: str = str(original).lower()
+    return "uq_hosts_name" in message or "unique constraint failed: hosts.name" in message
+
+
+class HostService:
+    """Implement host use cases across persistence and provider boundaries."""
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        drivers: HostDriverRegistry,
+        secret_encryptor: SecretEncryptor,
+    ) -> None:
+        """Initialize the service with its transaction and operation dependencies.
+
+        Args:
+            session: Session that owns transactions for host write operations.
+            drivers: Registry used to select a provider for remote operations.
+            secret_encryptor: Encryptor for credentials stored with host details.
+        """
+        self._session: AsyncSession = session
+        self._drivers: HostDriverRegistry = drivers
+        self._secret_encryptor: SecretEncryptor = secret_encryptor
+
+    def _build_host(self, request: HostCreate) -> Host:
+        if isinstance(request, DockerHostCreate):
+            docker_details: DockerHostDetails = DockerHostDetails(
+                address=request.address,
+                port=request.port,
+                username=request.username,
+                keypair_id=request.keypair_id,
+            )
+            docker_host: Host = Host(
+                type=HostType.DOCKER,
+                name=request.name,
+                enabled=request.enabled,
+                labels=request.labels,
+                docker_details=docker_details,
+            )
+            return docker_host
+
+        token_encrypted: bytes = self._secret_encryptor.encrypt(
+            PlaintextSecret(request.token.encode())
+        )
+        kubernetes_details: KubernetesHostDetails = KubernetesHostDetails(
+            api_url=request.api_url,
+            ca_cert_pem=request.ca_cert_pem,
+            token_encrypted=token_encrypted,
+            namespace=request.namespace,
+        )
+        kubernetes_host: Host = Host(
+            type=HostType.KUBERNETES,
+            name=request.name,
+            enabled=request.enabled,
+            labels=request.labels,
+            kubernetes_details=kubernetes_details,
+        )
+        return kubernetes_host
+
+    async def _get_required(self, host_id: HostId) -> Host:
+        host: Host | None = await hosts_crud.get_host(self._session, host_id)
+        if host is None:
+            raise HostNotFoundError(f"host {host_id} not found")
+        return host
+
+    def _apply_common_updates(self, host: Host, request: HostUpdateBase) -> None:
+        fields: set[str] = request.model_fields_set
+        if "name" in fields:
+            host.name = cast(str, request.name)
+        if "enabled" in fields:
+            host.enabled = cast(bool, request.enabled)
+        if "labels" in fields:
+            host.labels = cast(dict[str, str], request.labels)
+
+    async def _apply_docker_updates(
+        self,
+        host: Host,
+        request: DockerHostUpdate,
+    ) -> None:
+        details: DockerHostDetails = cast(DockerHostDetails, host.docker_details)
+        fields: set[str] = request.model_fields_set
+        if "keypair_id" in fields:
+            keypair_id: SSHKeypairId = cast(SSHKeypairId, request.keypair_id)
+            keypair: SSHKeypair | None = await keypairs_crud.get_keypair(
+                self._session,
+                keypair_id,
+            )
+            if keypair is None:
+                raise HostKeypairNotFoundError(
+                    f"keypair {keypair_id} not found",
+                    provider=HostType.DOCKER,
+                )
+            details.keypair_id = keypair_id
+        if "address" in fields:
+            details.address = cast(str, request.address)
+        if "port" in fields:
+            details.port = cast(int, request.port)
+        if "username" in fields:
+            details.username = cast(str, request.username)
+
+    def _apply_kubernetes_updates(
+        self,
+        host: Host,
+        request: KubernetesHostUpdate,
+    ) -> None:
+        details: KubernetesHostDetails = cast(
+            KubernetesHostDetails,
+            host.kubernetes_details,
+        )
+        fields: set[str] = request.model_fields_set
+        if "api_url" in fields:
+            details.api_url = cast(str, request.api_url)
+        if "ca_cert_pem" in fields:
+            details.ca_cert_pem = cast(str, request.ca_cert_pem)
+        if "token" in fields:
+            details.token_encrypted = self._secret_encryptor.encrypt(
+                PlaintextSecret(cast(str, request.token).encode())
+            )
+        if "namespace" in fields:
+            details.namespace = cast(str, request.namespace)
+
+    async def create(self, request: HostCreate) -> Host:
+        """Create a host and its matching provider details atomically.
+
+        Args:
+            request: Validated provider-specific host creation request.
+
+        Returns:
+            The newly persisted host aggregate.
+
+        Raises:
+            HostKeypairNotFoundError: If a Docker host selects an unknown SSH keypair.
+            HostNameConflictError: If the requested host name already exists.
+            SecretError: If provider credentials cannot be encrypted.
+        """
+        try:
+            if isinstance(request, DockerHostCreate):
+                keypair: SSHKeypair | None = await keypairs_crud.get_keypair(
+                    self._session,
+                    request.keypair_id,
+                )
+                if keypair is None:
+                    raise HostKeypairNotFoundError(
+                        f"keypair {request.keypair_id} not found",
+                        provider=HostType.DOCKER,
+                    )
+            host: Host = self._build_host(request)
+            created: Host = await hosts_crud.create_host(self._session, host)
+            await self._session.commit()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            if _is_host_name_conflict(exc):
+                raise HostNameConflictError(
+                    f"host with name {request.name!r} already exists",
+                    provider=HostType(request.type),
+                ) from exc
+            raise
+        except Exception:
+            await self._session.rollback()
+            raise
+        return created
+
+    async def get(self, host_id: HostId) -> Host:
+        """Get a host aggregate by its provider-neutral identifier.
+
+        Args:
+            host_id: Identifier of the requested host.
+
+        Returns:
+            The matching host with its provider details loaded.
+
+        Raises:
+            HostNotFoundError: If the requested host does not exist.
+        """
+        host: Host = await self._get_required(host_id)
+        return host
+
+    async def list(self, host_type: HostType | None = None) -> list[Host]:
+        """List hosts, optionally restricted to one provider type.
+
+        Args:
+            host_type: Provider to include, or ``None`` to include all hosts.
+
+        Returns:
+            Matching host aggregates in persistence-defined order.
+        """
+        hosts: list[Host] = await hosts_crud.list_hosts(self._session, host_type)
+        return hosts
+
+    async def update(self, host_id: HostId, request: HostUpdate) -> Host:
+        """Apply a provider-specific partial update atomically.
+
+        Args:
+            host_id: Identifier of the host to modify.
+            request: Validated partial update selected by provider type.
+
+        Returns:
+            The updated host aggregate.
+
+        Raises:
+            HostNotFoundError: If the requested host does not exist.
+            HostTypeChangeError: If the request type differs from the persisted provider.
+            HostKeypairNotFoundError: If a Docker update selects an unknown SSH keypair.
+            HostNameConflictError: If the requested host name already exists.
+            SecretError: If a replacement provider credential cannot be encrypted.
+        """
+        try:
+            host: Host = await self._get_required(host_id)
+            request_type: HostType = HostType(request.type)
+            if host.type is not request_type:
+                raise HostTypeChangeError(
+                    f"host {host_id} has type {host.type.value}; type cannot be changed to "
+                    f"{request_type.value}",
+                    provider=host.type,
+                )
+            self._apply_common_updates(host, request)
+            if isinstance(request, DockerHostUpdate):
+                await self._apply_docker_updates(host, request)
+            else:
+                self._apply_kubernetes_updates(host, request)
+            updated: Host = await hosts_crud.update_host(self._session, host)
+            await self._session.commit()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            if _is_host_name_conflict(exc):
+                raise HostNameConflictError(
+                    f"host with name {request.name!r} already exists",
+                    provider=HostType(request.type),
+                ) from exc
+            raise
+        except Exception:
+            await self._session.rollback()
+            raise
+        return updated
+
+    async def delete(self, host_id: HostId) -> None:
+        """Delete a host and its owned provider details atomically.
+
+        Args:
+            host_id: Identifier of the host to delete.
+
+        Raises:
+            HostNotFoundError: If the requested host does not exist.
+        """
+        try:
+            host: Host = await self._get_required(host_id)
+            await hosts_crud.delete_host(self._session, host)
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
+
+    async def ping(self, host_id: HostId) -> HostDriverPingResult:
+        """Check a host through its provider and persist successful observation state.
+
+        Args:
+            host_id: Identifier of the host to check.
+
+        Returns:
+            Provider-neutral observations from the successful check.
+
+        Raises:
+            HostNotFoundError: If the requested host does not exist.
+            HostError: If driver selection or the remote check fails.
+        """
+        try:
+            host: Host = await self._get_required(host_id)
+            driver: HostDriver = self._drivers.for_host(host)
+            result: HostDriverPingResult = await driver.ping(host)
+            host.last_seen_at = result.observed_at
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
+        return result
+
+
+__all__: list[str] = ["HostService"]

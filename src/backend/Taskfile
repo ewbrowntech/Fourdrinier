@@ -1,9 +1,45 @@
 version: "3"
 
 tasks:
+  sync:
+    desc: Install project dependencies with uv
+    cmds:
+      - uv sync
+
+  lint:
+    desc: Lint the backend source code
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff check
+
+  lint:fix:
+    desc: Fix linting errors automatically
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff check --fix
+
+  format:
+    desc: Format the backend source code
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff format
+
+  format:check:
+    desc: Check backend source formatting
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff format --check
+
+  check:
+    desc: Run backend static checks
+    dir: "{{.TASKFILE_DIR}}"
+    cmds:
+      - uv run ruff check
+      - uv run ruff format --check
+
   dev:
     desc: Run the API with uvicorn and auto-reload (ENV=debug)
-    deps: [sync]
+    deps: [sync, migrate]
     env:
       ENV: debug
     cmds:
@@ -16,3 +52,15 @@ tasks:
       ENV: prod
     cmds:
       - uv run python -m fourdrinier.main
+
+  migrate:
+    desc: Apply Alembic migrations to head
+    deps: [sync]
+    cmds:
+      - uv run alembic upgrade head
+
+  revision:
+    desc: 'Autogenerate an Alembic revision (usage: task revision -- "message")'
+    deps: [sync]
+    cmds:
+      - uv run alembic revision --autogenerate -m "{{.CLI_ARGS}}"

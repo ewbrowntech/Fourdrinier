@@ -1,0 +1,25 @@
+meta {
+  name: Upload keypair
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keypairs
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "imported",
+    "private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...paste an unencrypted key here...\n-----END OPENSSH PRIVATE KEY-----\n"
+  }
+}
+
+tests {
+  test("should import keypair", function() {
+    expect(res.status).to.equal(201);
+    expect(res.body.source).to.equal("uploaded");
+  });
+}

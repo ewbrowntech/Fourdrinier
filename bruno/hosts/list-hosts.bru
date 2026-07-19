@@ -1,0 +1,31 @@
+meta {
+  name: List hosts
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/hosts
+  body: none
+  auth: none
+}
+
+params:query {
+  type: docker
+}
+
+script:post-response {
+  if (res.status === 200 && Array.isArray(res.body)) {
+    const dockerHost = res.body.find((h) => h.type === "docker");
+    if (dockerHost && dockerHost.id) {
+      bru.setEnvVar("dockerHostId", dockerHost.id);
+    }
+  }
+}
+
+tests {
+  test("should list hosts", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body).to.be.an("array");
+  });
+}

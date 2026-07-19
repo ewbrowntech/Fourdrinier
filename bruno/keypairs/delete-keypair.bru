@@ -1,0 +1,21 @@
+meta {
+  name: Delete keypair
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/keypairs/{{keypairId}}
+  body: none
+  auth: none
+}
+
+params:path {
+  keypairId: {{keypairId}}
+}
+
+tests {
+  test("should delete keypair or report it is in use", function() {
+    expect([204, 409]).to.include(res.status);
+  });
+}

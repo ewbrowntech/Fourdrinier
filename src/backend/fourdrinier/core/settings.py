@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = Field(default=8000, ge=1, le=65535)
 
+    # Async SQLite by default; override with DATABASE_URL.
+    # Relative path resolves against process CWD (backend package root locally and in Docker).
+    database_url: str = "sqlite+aiosqlite:///./data/fourdrinier.db"
+
+    # Fernet key used to encrypt secrets at rest (SSH private keys).
+    # Generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Validated lazily by core.crypto so the app can boot without it until a
+    # secret actually needs to be encrypted or decrypted.
+    encryption_key: str | None = None
+
     log_level: LogLevel = "info"
 
     docs_url: str | None = "/docs"
@@ -70,4 +81,4 @@ class Settings(BaseSettings):
 SETTINGS = Settings()
 
 
-__all__ = ["AppEnv", "LogLevel", "SETTINGS", "Settings"]
+__all__ = ["SETTINGS", "AppEnv", "LogLevel", "Settings"]

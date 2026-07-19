@@ -5,6 +5,7 @@
 ########################################################
 
 ARG PYTHON_VERSION=3.12
+ARG NODE_VERSION=24
 
 ########################################################
 # Base — Python runtime with uv
@@ -84,4 +85,28 @@ WORKDIR /app/backend
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uv sync && exec python -m fourdrinier.main"]
+CMD ["sh", "-c", "uv sync && alembic upgrade head && exec python -m fourdrinier.main"]
+
+########################################################
+# Frontend debug runtime — Vite dev server
+########################################################
+
+FROM node:${NODE_VERSION}-slim AS frontend-debug
+
+# corepack pins pnpm to the packageManager version in package.json
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+RUN corepack enable
+
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+COPY frontend/ ./
+
+EXPOSE 5173
+
+CMD ["sh", "-c", "pnpm install --config.confirm-modules-purge=false && exec pnpm dev"]

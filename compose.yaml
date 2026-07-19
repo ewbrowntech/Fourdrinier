@@ -7,12 +7,35 @@ services:
       target: debug
     ports:
       - "127.0.0.1:${PORT:-8000}:8000"
-    env_file:
-      - .env
     environment:
       ENV: debug
       PORT: 8000
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     volumes:
       - ./src/backend/fourdrinier:/app/backend/fourdrinier
       - ./src/backend/pyproject.toml:/app/backend/pyproject.toml
       - ./src/backend/uv.lock:/app/backend/uv.lock
+      - ./src/backend/alembic:/app/backend/alembic
+      - ./src/backend/alembic.ini:/app/backend/alembic.ini
+      - ./src/backend/data:/app/backend/data
+    networks:
+      - default
+
+  frontend:
+    profiles: [debug]
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+      target: frontend-debug
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
+    environment:
+      BACKEND_URL: http://backend:8000
+    volumes:
+      - ./src/frontend:/app/frontend
+      # Keep the container's node_modules; don't shadow it with the host's
+      - /app/frontend/node_modules
+    depends_on:
+      - backend
+    networks:
+      - default

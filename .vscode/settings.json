@@ -1,17 +1,39 @@
 {
   "python.envFile": "${workspaceFolder}/.env",
+  "fastapi.entryPoint": "src.backend.fourdrinier.app:app",
+  "fastapi.cloud.enabled": false,
+  "fastapi.telemetry.enabled": false,
   "files.exclude": {
     "**/__pycache__": true
   },
   "search.exclude": {
     "**/__pycache__": true
   },
+  "editor.rulers": [
+    100
+  ],
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.fixAll.markdownlint": "explicit"
   },
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
   "[markdown]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "vscode.markdown-language-features"
-  }
+  },
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "python.testing.cwd": "${workspaceFolder}/src/backend",
+  "python.testing.pytestArgs": [
+    "tests",
+    "--cov=fourdrinier"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
 }

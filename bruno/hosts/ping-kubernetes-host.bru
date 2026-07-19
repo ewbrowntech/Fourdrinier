@@ -1,0 +1,26 @@
+meta {
+  name: Ping Kubernetes host
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/hosts/{{kubernetesHostId}}/ping
+  body: none
+  auth: none
+}
+
+params:path {
+  kubernetesHostId: {{kubernetesHostId}}
+}
+
+tests {
+  test("should ping kubernetes host", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.status).to.equal("ok");
+    expect(res.body.type).to.equal("kubernetes");
+    expect(res.body).to.have.property("git_version");
+    expect(res.body).to.have.property("username");
+    expect(res.body.can_create_deployments).to.equal(true);
+  });
+}
