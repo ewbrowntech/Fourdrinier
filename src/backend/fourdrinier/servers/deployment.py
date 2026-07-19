@@ -27,6 +27,14 @@ class ContainerPort:
 
 
 @dataclass(frozen=True, slots=True)
+class EnvironmentVariable:
+    """Describe an environment variable supplied to a runtime container."""
+
+    name: str
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
 class PersistentMount:
     """Describe provider-managed persistent storage mounted into a container."""
 
@@ -73,6 +81,7 @@ class DeploymentSpec:
 
     image_reference: str
     command: tuple[str, ...]
+    env: tuple[EnvironmentVariable, ...]
     persistent_mounts: tuple[PersistentMount, ...]
     ports: tuple[ContainerPort, ...]
     resources: ResourceAllocation
@@ -83,6 +92,7 @@ class DeploymentSpec:
 __all__: list[str] = [
     "ContainerPort",
     "DeploymentSpec",
+    "EnvironmentVariable",
     "GeneratedFile",
     "NetworkProtocol",
     "PersistentMount",

@@ -57,16 +57,29 @@ def get_host_service(session: DbSession, settings: SettingsDep) -> HostService:
 HostServiceDep = Annotated[HostService, Depends(get_host_service)]
 
 
-def get_server_service(session: DbSession) -> ServerService:
+def get_runtime_registry() -> RuntimeRegistry:
+    """Build the runtime adapter registry for the current request.
+
+    Returns:
+        A registry containing every supported runtime adapter.
+    """
+    registry: RuntimeRegistry = RuntimeRegistry(PumpkinRuntime())
+    return registry
+
+
+RuntimeRegistryDep = Annotated[RuntimeRegistry, Depends(get_runtime_registry)]
+
+
+def get_server_service(session: DbSession, runtimes: RuntimeRegistryDep) -> ServerService:
     """Build a logical server service for the current request.
 
     Args:
         session: Request-scoped database session.
+        runtimes: Registry used to select runtime deployment adapters.
 
     Returns:
         A logical server service configured with every runtime adapter.
     """
-    runtimes: RuntimeRegistry = RuntimeRegistry(PumpkinRuntime())
     service: ServerService = ServerService(session=session, runtimes=runtimes)
     return service
 
@@ -75,7 +88,9 @@ ServerServiceDep = Annotated[ServerService, Depends(get_server_service)]
 
 __all__: list[str] = [
     "HostServiceDep",
+    "RuntimeRegistryDep",
     "ServerServiceDep",
     "get_host_service",
+    "get_runtime_registry",
     "get_server_service",
 ]

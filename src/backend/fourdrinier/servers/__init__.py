@@ -5,10 +5,12 @@ Export logical server domain types and failures.
 """
 
 from fourdrinier.servers.errors import (
+    RuntimeNotRegisteredError,
     ServerError,
     ServerNameConflictError,
     ServerNotFoundError,
     ServerResourceMinimumError,
+    ServerVersionUnsupportedError,
 )
 from fourdrinier.servers.pumpkin import (
     PUMPKIN_MINECRAFT_VERSION,
@@ -29,6 +31,7 @@ __all__: list[str] = [
     "PUMPKIN_MINECRAFT_VERSION",
     "PUMPKIN_MINIMUM_CPU_MILLICORES",
     "PUMPKIN_MINIMUM_MEMORY_BYTES",
+    "RuntimeNotRegisteredError",
     "ServerDesiredState",
     "ServerError",
     "ServerId",
@@ -36,4 +39,5 @@ __all__: list[str] = [
     "ServerNotFoundError",
     "ServerResourceMinimumError",
     "ServerRuntime",
+    "ServerVersionUnsupportedError",
 ]

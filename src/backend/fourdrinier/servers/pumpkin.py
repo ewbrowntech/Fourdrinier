@@ -17,6 +17,7 @@ from fourdrinier.servers.deployment import (
     ResourceAllocation,
     TcpHealthCheck,
 )
+from fourdrinier.servers.errors import ServerVersionUnsupportedError
 from fourdrinier.servers.types import ServerRuntime
 
 if TYPE_CHECKING:
@@ -40,11 +41,38 @@ class PumpkinRuntime:
     """Build deployment specifications for the official upstream Pumpkin image."""
 
     runtime: ServerRuntime = ServerRuntime.PUMPKIN
-    minecraft_version: str = PUMPKIN_MINECRAFT_VERSION
     minimum_resources: ResourceAllocation = ResourceAllocation(
         cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
         memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
     )
+
+    def resolve_version(self, requested: str | None) -> str:
+        """Resolve a requested Minecraft version to the single supported Pumpkin version.
+
+        Args:
+            requested: Minecraft version requested by the caller, or None for the
+                current Pumpkin default.
+
+        Returns:
+            The pinned Minecraft version served by the upstream Pumpkin image.
+
+        Raises:
+            ServerVersionUnsupportedError: If the requested version is not the pinned
+                Pumpkin version.
+        """
+        if requested is None or requested == PUMPKIN_MINECRAFT_VERSION:
+            return PUMPKIN_MINECRAFT_VERSION
+        raise ServerVersionUnsupportedError(
+            f"pumpkin only supports Minecraft version {PUMPKIN_MINECRAFT_VERSION}"
+        )
+
+    async def list_versions(self) -> list[str]:
+        """List the single Minecraft version served by the upstream Pumpkin image.
+
+        Returns:
+            A one-element list containing the pinned Pumpkin Minecraft version.
+        """
+        return [PUMPKIN_MINECRAFT_VERSION]
 
     def deployment_spec(self, server: Server) -> DeploymentSpec:
         """Build an upstream Pumpkin deployment specification.
@@ -58,6 +86,7 @@ class PumpkinRuntime:
         specification: DeploymentSpec = DeploymentSpec(
             image_reference=PUMPKIN_IMAGE_REFERENCE,
             command=("/bin/pumpkin",),
+            env=(),
             persistent_mounts=(
                 PersistentMount(
                     name=PUMPKIN_DATA_MOUNT_NAME,

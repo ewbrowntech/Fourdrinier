@@ -24,7 +24,6 @@ from fourdrinier.servers.runtimes import RuntimeAdapter, RuntimeRegistry
 from fourdrinier.servers.types import (
     ServerDesiredState,
     ServerId,
-    ServerRuntime,
 )
 
 
@@ -71,7 +70,7 @@ class ServerService:
         return server
 
     async def create(self, request: ServerCreate) -> Server:
-        """Save a stopped, unassigned Pumpkin server configuration.
+        """Save a stopped, unassigned logical server configuration.
 
         Args:
             request: Validated logical server creation request.
@@ -82,9 +81,11 @@ class ServerService:
         Raises:
             ServerNameConflictError: If the requested server name already exists.
             ServerResourceMinimumError: If an allocation is below its runtime minimum.
+            ServerVersionUnsupportedError: If the runtime does not support the
+                requested Minecraft version.
         """
-        runtime_type: ServerRuntime = ServerRuntime(request.runtime)
-        runtime: RuntimeAdapter = self._runtimes.for_runtime(runtime_type)
+        runtime: RuntimeAdapter = self._runtimes.for_runtime(request.runtime)
+        minecraft_version: str = runtime.resolve_version(request.minecraft_version)
         _validate_resource_minimums(
             runtime,
             request.cpu_millicores,
@@ -92,8 +93,8 @@ class ServerService:
         )
         server: Server = Server(
             name=request.name,
-            runtime=runtime_type,
-            minecraft_version=runtime.minecraft_version,
+            runtime=request.runtime,
+            minecraft_version=minecraft_version,
             cpu_millicores=request.cpu_millicores,
             memory_bytes=request.memory_bytes,
             desired_state=ServerDesiredState.STOPPED,
@@ -155,8 +156,12 @@ class ServerService:
         specification: DeploymentSpec = runtime.deployment_spec(server)
         return specification
 
-    async def update(self, server_id: ServerId, request: ServerUpdate) -> Server:
-        """Update editable metadata and resource allocation for a logical server.
+    async def update(  # noqa: C901
+        self,
+        server_id: ServerId,
+        request: ServerUpdate,
+    ) -> Server:
+        """Update editable metadata, version, and resource allocation for a logical server.
 
         Args:
             server_id: Identifier of the server to modify.
@@ -169,12 +174,15 @@ class ServerService:
             ServerNotFoundError: If the requested server does not exist.
             ServerNameConflictError: If the requested server name already exists.
             ServerResourceMinimumError: If an allocation is below its runtime minimum.
+            ServerVersionUnsupportedError: If the runtime does not support the
+                requested Minecraft version.
         """
         try:
             server: Server = await self._get_required(server_id)
             resources_supplied: bool = bool(
                 {"cpu_millicores", "memory_bytes"} & request.model_fields_set
             )
+            version_supplied: bool = "minecraft_version" in request.model_fields_set
             resources_changed: bool = False
             cpu_millicores: int = server.cpu_millicores
             if "cpu_millicores" in request.model_fields_set:
@@ -184,14 +192,25 @@ class ServerService:
             if "memory_bytes" in request.model_fields_set:
                 memory_bytes = cast(int, request.memory_bytes)
                 resources_changed = resources_changed or server.memory_bytes != memory_bytes
-            if resources_supplied:
+            version_changed: bool = False
+            minecraft_version: str = server.minecraft_version
+            if resources_supplied or version_supplied:
                 runtime: RuntimeAdapter = self._runtimes.for_runtime(server.runtime)
-                _validate_resource_minimums(runtime, cpu_millicores, memory_bytes)
+                if version_supplied:
+                    minecraft_version = runtime.resolve_version(
+                        cast(str, request.minecraft_version)
+                    )
+                    version_changed = server.minecraft_version != minecraft_version
+                if resources_supplied:
+                    _validate_resource_minimums(runtime, cpu_millicores, memory_bytes)
             if "name" in request.model_fields_set:
                 server.name = cast(str, request.name)
             if resources_changed:
                 server.cpu_millicores = cpu_millicores
                 server.memory_bytes = memory_bytes
+            if version_changed:
+                server.minecraft_version = minecraft_version
+            if resources_changed or version_changed:
                 server.spec_generation += 1
             updated: Server = await servers_crud.update_server(self._session, server)
             await self._session.commit()

@@ -15,26 +15,29 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from fourdrinier.servers.types import (
     DEFAULT_SERVER_CPU_MILLICORES,
     DEFAULT_SERVER_MEMORY_BYTES,
+    ServerRuntime,
 )
 
 
 class ServerCreate(BaseModel):
-    """Define a request to save a Pumpkin server configuration."""
+    """Define a request to save a logical server configuration."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=255)
-    runtime: Literal["pumpkin"] = "pumpkin"
+    runtime: ServerRuntime = ServerRuntime.PUMPKIN
+    minecraft_version: str | None = Field(default=None, min_length=1, max_length=32)
     cpu_millicores: int = Field(default=DEFAULT_SERVER_CPU_MILLICORES, gt=0)
     memory_bytes: int = Field(default=DEFAULT_SERVER_MEMORY_BYTES, gt=0)
 
 
 class ServerUpdate(BaseModel):
-    """Define editable metadata and resource allocation for a saved logical server."""
+    """Define editable metadata, version, and resource allocation for a saved logical server."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    minecraft_version: str | None = Field(default=None, min_length=1, max_length=32)
     cpu_millicores: int | None = Field(default=None, gt=0)
     memory_bytes: int | None = Field(default=None, gt=0)
 
@@ -62,7 +65,7 @@ class ServerRead(BaseModel):
 
     id: uuid.UUID
     name: str
-    runtime: Literal["pumpkin"]
+    runtime: ServerRuntime
     minecraft_version: str
     cpu_millicores: int
     memory_bytes: int

@@ -23,9 +23,19 @@ class ServerResourceMinimumError(ServerError):
     """A resource allocation is below the selected runtime's minimum."""
 
 
+class ServerVersionUnsupportedError(ServerError):
+    """The selected runtime does not support the requested Minecraft version."""
+
+
+class RuntimeNotRegisteredError(ServerError):
+    """No runtime adapter is registered for the requested server runtime."""
+
+
 __all__: list[str] = [
+    "RuntimeNotRegisteredError",
     "ServerError",
     "ServerNameConflictError",
     "ServerNotFoundError",
     "ServerResourceMinimumError",
+    "ServerVersionUnsupportedError",
 ]
