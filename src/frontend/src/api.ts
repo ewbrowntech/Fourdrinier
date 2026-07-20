@@ -107,6 +107,10 @@ export const SERVER_RUNTIMES: readonly { id: ServerRuntime; label: string }[] = 
   { id: 'pumpkin', label: 'Pumpkin' },
 ]
 
+export function runtimeLabel(runtime: ServerRuntime): string {
+  return SERVER_RUNTIMES.find((entry) => entry.id === runtime)?.label ?? runtime
+}
+
 export interface ServerRead {
   id: string
   name: string

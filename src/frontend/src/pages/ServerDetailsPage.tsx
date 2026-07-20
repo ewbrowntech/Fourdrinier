@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { api } from '../api'
+import { api, runtimeLabel } from '../api'
 import type { ServerRead } from '../api'
 import ConfirmDialog from '../components/ConfirmDialog'
 import EditServerForm from '../components/EditServerForm'
@@ -86,7 +86,7 @@ function ServerDetailsPage({ serverId }: ServerDetailsPageProps) {
         <span className="server-cube large" aria-hidden="true"><span /></span>
         <div className="detail-title">
           <h1>{server.name}</h1>
-          <span className="type-tag">Pumpkin</span>
+          <span className="type-tag">{runtimeLabel(server.runtime)}</span>
           <span className="pill unassigned">Not deployed</span>
         </div>
         <div className="detail-actions">
@@ -134,7 +134,10 @@ function ServerDetailsPage({ serverId }: ServerDetailsPageProps) {
         <dl className="detail-grid">
           <div className="detail-item">
             <dt>Runtime</dt>
-            <dd>Pumpkin <span className="experimental-tag compact">Experimental</span></dd>
+            <dd>
+              {runtimeLabel(server.runtime)}{' '}
+              <span className="experimental-tag compact">Experimental</span>
+            </dd>
           </div>
           <div className="detail-item">
             <dt>Minecraft version</dt>

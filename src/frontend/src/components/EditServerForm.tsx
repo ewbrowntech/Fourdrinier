@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { api } from '../api'
+import { api, runtimeLabel } from '../api'
 import type { ServerRead, ServerUpdate } from '../api'
 import {
   bytesToGibibytes,
@@ -97,7 +97,7 @@ function EditServerForm({ server, onUpdated, onCancel }: EditServerFormProps) {
       </div>
 
       <p className="resource-note">
-        Pumpkin requires at least {minimumResources.cpuCores} cores and{' '}
+        {runtimeLabel(server.runtime)} requires at least {minimumResources.cpuCores} cores and{' '}
         {minimumResources.memoryGib} GiB of memory. Changing either allocation creates a new
         specification generation for the next deployment.
       </p>

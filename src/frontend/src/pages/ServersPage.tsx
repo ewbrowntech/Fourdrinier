@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { api } from '../api'
+import { api, runtimeLabel } from '../api'
 import type { ServerRead } from '../api'
 import { formatCpu, formatMemory } from '../serverResources'
 
@@ -52,7 +52,7 @@ function ServersPage() {
           </svg>
           <h2>No server plans yet</h2>
           <p>
-            Save a Pumpkin server now. You can choose where to deploy it in a later step.
+            Save a server plan now. You can choose where to deploy it in a later step.
           </p>
           <Link className="btn primary" to="/servers/new">
             Create your first server
@@ -70,7 +70,7 @@ function ServersPage() {
                 </span>
                 <span className="server-main">
                   <span className="host-name">{server.name}</span>
-                  <span className="type-tag">Pumpkin</span>
+                  <span className="type-tag">{runtimeLabel(server.runtime)}</span>
                 </span>
                 <span className="server-status">
                   <span className="pill unassigned">Not deployed</span>
