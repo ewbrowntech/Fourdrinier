@@ -56,17 +56,19 @@ def fill_runtime(
     """Build a Paper runtime whose Fill API transport returns a canned response.
 
     Args:
-        payload: JSON body returned by the mocked Fill API.
+        payload: JSON body returned by the mocked Fill API, or raw response
+            bytes when the body must not be JSON-encoded.
         status_code: HTTP status returned by the mocked Fill API.
 
     Returns:
         The runtime and the list collecting every request the runtime sends.
     """
     requests: list[httpx.Request] = []
+    content: bytes = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
 
     def respond(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        return httpx.Response(status_code, content=json.dumps(payload))
+        return httpx.Response(status_code, content=content)
 
     runtime: PaperRuntime = PaperRuntime(transport=httpx.MockTransport(respond))
     return runtime, requests
@@ -88,7 +90,6 @@ def test_paper_runtime_deployment_spec_001_nominal_logical_server_is_translated(
     )
     expected: DeploymentSpec = DeploymentSpec(
         image_reference=f"{PAPER_IMAGE_REPOSITORY}:java21",
-        command=(),
         env=(
             EnvironmentVariable(name="TYPE", value="PAPER"),
             EnvironmentVariable(name="VERSION", value="1.21.4"),
@@ -270,6 +271,12 @@ async def test_paper_runtime_list_versions_005_nominal_families_are_flattened_in
             200,
             f"unexpected Paper version payload from {PAPER_FILL_PROJECT_URL}",
             id="no-versions",
+        ),
+        pytest.param(
+            b"not-json",
+            200,
+            f"unexpected Paper version payload from {PAPER_FILL_PROJECT_URL}",
+            id="invalid-json",
         ),
     ],
 )

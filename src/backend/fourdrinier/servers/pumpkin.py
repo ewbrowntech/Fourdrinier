@@ -85,7 +85,6 @@ class PumpkinRuntime:
         """
         specification: DeploymentSpec = DeploymentSpec(
             image_reference=PUMPKIN_IMAGE_REFERENCE,
-            command=("/bin/pumpkin",),
             env=(),
             persistent_mounts=(
                 PersistentMount(

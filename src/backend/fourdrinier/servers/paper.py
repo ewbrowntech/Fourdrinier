@@ -6,6 +6,7 @@ Translate Paper logical servers into itzg/minecraft-server deployment specificat
 
 from __future__ import annotations
 
+import json
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -33,7 +34,7 @@ PAPER_FILL_PROJECT_URL: str = "https://fill.papermc.io/v3/projects/paper"
 # Fill rejects generic User-Agent values; identify Fourdrinier with a contact URL.
 PAPER_FILL_USER_AGENT: str = "fourdrinier/0.1.0 (https://github.com/ewbrowntech/fourdrinier)"
 PAPER_FILL_TIMEOUT_SECONDS: float = 10.0
-PAPER_MINIMUM_CPU_MILLICORES: int = 2_000
+PAPER_MINIMUM_CPU_MILLICORES: int = 1_000
 PAPER_MINIMUM_MEMORY_BYTES: int = 2 * 1024 * 1024 * 1024
 PAPER_IMAGE_REPOSITORY: str = "itzg/minecraft-server"
 PAPER_DATA_MOUNT_NAME: str = "data"
@@ -147,6 +148,10 @@ class PaperRuntime:
             raise RuntimeVersionSourceError(
                 f"failed to fetch Paper versions from {PAPER_FILL_PROJECT_URL}"
             ) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeVersionSourceError(
+                f"unexpected Paper version payload from {PAPER_FILL_PROJECT_URL}"
+            ) from exc
         families: Any = payload.get("versions") if isinstance(payload, dict) else None
         if not isinstance(families, dict):
             raise RuntimeVersionSourceError(
@@ -212,8 +217,6 @@ class PaperRuntime:
         """
         specification: DeploymentSpec = DeploymentSpec(
             image_reference=_image_reference(server.minecraft_version),
-            # Empty command defers to the itzg image entrypoint.
-            command=(),
             env=(
                 EnvironmentVariable(name="TYPE", value="PAPER"),
                 EnvironmentVariable(name="VERSION", value=server.minecraft_version),

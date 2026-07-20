@@ -75,12 +75,11 @@ class TcpHealthCheck:
 class DeploymentSpec:
     """Describe a runtime deployment without provider-specific workload types.
 
-    The command is the complete process invocation and replaces image process defaults when a
-    host driver constructs its provider workload.
+    Host drivers run the image's built-in process; runtime-specific startup is
+    expressed through the image reference, environment, and generated files.
     """
 
     image_reference: str
-    command: tuple[str, ...]
     env: tuple[EnvironmentVariable, ...]
     persistent_mounts: tuple[PersistentMount, ...]
     ports: tuple[ContainerPort, ...]

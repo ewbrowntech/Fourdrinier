@@ -50,7 +50,6 @@ def test_pumpkin_runtime_deployment_spec_001_nominal_logical_server_is_translate
     )
     expected: DeploymentSpec = DeploymentSpec(
         image_reference=PUMPKIN_IMAGE_REFERENCE,
-        command=("/bin/pumpkin",),
         env=(),
         persistent_mounts=(
             PersistentMount(

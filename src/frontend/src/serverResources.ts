@@ -14,7 +14,7 @@ export const DEFAULT_SERVER_RESOURCES: ServerResourceValues = {
 
 const RUNTIME_MINIMUM_RESOURCES: Record<ServerRuntime, ServerResourceValues> = {
   paper: {
-    cpuCores: 2,
+    cpuCores: 1,
     memoryGib: 2,
   },
   pumpkin: {
