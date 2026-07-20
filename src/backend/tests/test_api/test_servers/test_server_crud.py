@@ -56,19 +56,40 @@ async def test_create_server_001_nominal_pumpkin_configuration_is_saved(
 @pytest.mark.parametrize(
     "payload",
     [
-        pytest.param({"name": ""}, id="empty-name"),
-        pytest.param({"name": "paper-world", "runtime": "paper"}, id="unsupported-runtime"),
-        pytest.param({"name": "eager-world", "desired_state": "running"}, id="lifecycle-state"),
-        pytest.param({"name": "no-cpu", "cpu_millicores": 0}, id="zero-cpu"),
-        pytest.param({"name": "no-memory", "memory_bytes": 0}, id="zero-memory"),
-        pytest.param({"name": "default-pumpkin"}, id="default-below-runtime-minimum"),
+        pytest.param({"name": "", "runtime": "pumpkin"}, id="empty-name"),
+        pytest.param({"name": "runtimeless-world"}, id="missing-runtime"),
+        pytest.param({"name": "forge-world", "runtime": "forge"}, id="unknown-runtime"),
+        pytest.param(
+            {"name": "eager-world", "runtime": "pumpkin", "desired_state": "running"},
+            id="lifecycle-state",
+        ),
+        pytest.param({"name": "no-cpu", "runtime": "pumpkin", "cpu_millicores": 0}, id="zero-cpu"),
+        pytest.param(
+            {"name": "no-memory", "runtime": "pumpkin", "memory_bytes": 0},
+            id="zero-memory",
+        ),
+        pytest.param(
+            {"name": "default-pumpkin", "runtime": "pumpkin"},
+            id="default-below-runtime-minimum",
+        ),
         pytest.param(
             {
                 "name": "small-pumpkin",
+                "runtime": "pumpkin",
                 "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES - 1,
                 "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
             },
             id="runtime-cpu-minimum",
+        ),
+        pytest.param(
+            {
+                "name": "wrong-version",
+                "runtime": "pumpkin",
+                "minecraft_version": "1.8.8",
+                "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
+                "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
+            },
+            id="unsupported-version",
         ),
     ],
 )
@@ -102,6 +123,7 @@ async def test_create_server_003_anomalous_name_already_exists(
     original: JsonObject = await server_factory(name="shared-world")
     payload: JsonObject = {
         "name": "shared-world",
+        "runtime": "pumpkin",
         "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
         "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
     }
@@ -240,6 +262,8 @@ async def test_update_server_008_nominal_empty_patch_preserves_configuration(
         pytest.param("negative-memory", 422, id="negative-memory"),
         pytest.param("below-runtime-memory", 422, id="below-runtime-memory"),
         pytest.param("immutable-runtime", 422, id="immutable-runtime"),
+        pytest.param("null-version", 422, id="null-version"),
+        pytest.param("unsupported-version", 422, id="unsupported-version"),
     ],
 )
 async def test_update_server_009_anomalous_invalid_update_is_rejected(
@@ -271,6 +295,10 @@ async def test_update_server_009_anomalous_invalid_update_is_rejected(
         payload = {"memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES - 1}
     elif scenario == "immutable-runtime":
         payload = {"runtime": "pumpkin"}
+    elif scenario == "null-version":
+        payload = {"minecraft_version": None}
+    elif scenario == "unsupported-version":
+        payload = {"minecraft_version": "1.8.8"}
 
     # Act
     response: httpx.Response = await client.patch(
@@ -309,6 +337,31 @@ async def test_update_server_012_nominal_resources_advance_specification_generat
     assert updated["cpu_millicores"] == 2_500
     assert updated["memory_bytes"] == 3_221_225_472
     assert updated["spec_generation"] == created["spec_generation"] + 1
+
+
+async def test_update_server_013_nominal_pinned_version_is_accepted_without_new_generation(
+    client: httpx.AsyncClient,
+    server_factory: ServerFactory,
+) -> None:
+    """Test 013 - Nominal
+    Condition: A saved server is updated with the version its runtime already deploys
+    Result: The version is unchanged and specification generation does not advance
+    """
+    # Arrange
+    created: JsonObject = await server_factory(name="pinned-version-world")
+    payload: JsonObject = {"minecraft_version": PUMPKIN_MINECRAFT_VERSION}
+
+    # Act
+    response: httpx.Response = await client.patch(
+        f"/api/v1/servers/{created['id']}",
+        json=payload,
+    )
+
+    # Assert
+    updated: JsonObject = response.json()
+    assert response.status_code == 200
+    assert updated["minecraft_version"] == PUMPKIN_MINECRAFT_VERSION
+    assert updated["spec_generation"] == created["spec_generation"]
 
 
 async def test_delete_server_010_nominal_saved_configuration_exists(

@@ -27,6 +27,14 @@ class ContainerPort:
 
 
 @dataclass(frozen=True, slots=True)
+class EnvironmentVariable:
+    """Describe an environment variable supplied to a runtime container."""
+
+    name: str
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
 class PersistentMount:
     """Describe provider-managed persistent storage mounted into a container."""
 
@@ -67,12 +75,12 @@ class TcpHealthCheck:
 class DeploymentSpec:
     """Describe a runtime deployment without provider-specific workload types.
 
-    The command is the complete process invocation and replaces image process defaults when a
-    host driver constructs its provider workload.
+    Host drivers run the image's built-in process; runtime-specific startup is
+    expressed through the image reference, environment, and generated files.
     """
 
     image_reference: str
-    command: tuple[str, ...]
+    env: tuple[EnvironmentVariable, ...]
     persistent_mounts: tuple[PersistentMount, ...]
     ports: tuple[ContainerPort, ...]
     resources: ResourceAllocation
@@ -83,6 +91,7 @@ class DeploymentSpec:
 __all__: list[str] = [
     "ContainerPort",
     "DeploymentSpec",
+    "EnvironmentVariable",
     "GeneratedFile",
     "NetworkProtocol",
     "PersistentMount",

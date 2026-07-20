@@ -14,9 +14,11 @@ from fourdrinier.api.deps import ServerServiceDep
 from fourdrinier.db.models import Server
 from fourdrinier.schemas import ServerCreate, ServerRead, ServerUpdate
 from fourdrinier.servers import (
+    RuntimeVersionSourceError,
     ServerNameConflictError,
     ServerNotFoundError,
     ServerResourceMinimumError,
+    ServerVersionUnsupportedError,
 )
 
 router: APIRouter = APIRouter(prefix="/servers", tags=["servers"])
@@ -30,13 +32,19 @@ def _name_conflict(exc: ServerNameConflictError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _invalid_resources(exc: ServerResourceMinimumError) -> HTTPException:
+def _unprocessable(
+    exc: ServerResourceMinimumError | ServerVersionUnsupportedError,
+) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
+
+
+def _version_source_unavailable(exc: RuntimeVersionSourceError) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
 
 @router.post("", response_model=ServerRead, status_code=status.HTTP_201_CREATED)
 async def create_server(body: ServerCreate, service: ServerServiceDep) -> Server:
-    """Save a logical Pumpkin server without provisioning it.
+    """Save a logical server without provisioning it.
 
     Args:
         body: Validated server configuration.
@@ -46,14 +54,18 @@ async def create_server(body: ServerCreate, service: ServerServiceDep) -> Server
         The newly saved server configuration.
 
     Raises:
-        HTTPException: If the name is in use or resources are below the runtime minimum.
+        HTTPException: If the name is in use, resources are below the runtime minimum,
+            the runtime does not support the requested Minecraft version, or the
+            runtime's version source cannot be consulted.
     """
     try:
         server: Server = await service.create(body)
     except ServerNameConflictError as exc:
         raise _name_conflict(exc) from exc
-    except ServerResourceMinimumError as exc:
-        raise _invalid_resources(exc) from exc
+    except (ServerResourceMinimumError, ServerVersionUnsupportedError) as exc:
+        raise _unprocessable(exc) from exc
+    except RuntimeVersionSourceError as exc:
+        raise _version_source_unavailable(exc) from exc
     return server
 
 
@@ -98,7 +110,7 @@ async def update_server(
     body: ServerUpdate,
     service: ServerServiceDep,
 ) -> Server:
-    """Update editable metadata and resources for a saved logical server.
+    """Update editable metadata, version, and resources for a saved logical server.
 
     Args:
         server_id: Identifier of the server to update.
@@ -109,7 +121,9 @@ async def update_server(
         The updated saved server configuration.
 
     Raises:
-        HTTPException: If the server is missing, the name is in use, or resources are invalid.
+        HTTPException: If the server is missing, the name is in use, the resources
+            or Minecraft version are invalid for the runtime, or the runtime's
+            version source cannot be consulted.
     """
     try:
         server: Server = await service.update(server_id, body)
@@ -117,8 +131,10 @@ async def update_server(
         raise _not_found(exc) from exc
     except ServerNameConflictError as exc:
         raise _name_conflict(exc) from exc
-    except ServerResourceMinimumError as exc:
-        raise _invalid_resources(exc) from exc
+    except (ServerResourceMinimumError, ServerVersionUnsupportedError) as exc:
+        raise _unprocessable(exc) from exc
+    except RuntimeVersionSourceError as exc:
+        raise _version_source_unavailable(exc) from exc
     return server
 
 

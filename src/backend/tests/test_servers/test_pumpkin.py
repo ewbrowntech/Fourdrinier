@@ -6,6 +6,8 @@ Unit tests for PumpkinRuntime deployment translation.
 
 from __future__ import annotations
 
+import pytest
+
 from fourdrinier.db.models import Server
 from fourdrinier.servers.deployment import (
     ContainerPort,
@@ -16,6 +18,7 @@ from fourdrinier.servers.deployment import (
     ResourceAllocation,
     TcpHealthCheck,
 )
+from fourdrinier.servers.errors import ServerVersionUnsupportedError
 from fourdrinier.servers.pumpkin import (
     PUMPKIN_CONFIGURATION,
     PUMPKIN_DATA_MOUNT_NAME,
@@ -47,7 +50,7 @@ def test_pumpkin_runtime_deployment_spec_001_nominal_logical_server_is_translate
     )
     expected: DeploymentSpec = DeploymentSpec(
         image_reference=PUMPKIN_IMAGE_REFERENCE,
-        command=("/bin/pumpkin",),
+        env=(),
         persistent_mounts=(
             PersistentMount(
                 name=PUMPKIN_DATA_MOUNT_NAME,
@@ -88,9 +91,63 @@ def test_pumpkin_runtime_deployment_spec_001_nominal_logical_server_is_translate
     # Assert
     assert result == expected
     assert runtime.runtime is ServerRuntime.PUMPKIN
-    assert runtime.minecraft_version == "26.2"
     assert runtime.minimum_resources == ResourceAllocation(
         cpu_millicores=PUMPKIN_MINIMUM_CPU_MILLICORES,
         memory_bytes=PUMPKIN_MINIMUM_MEMORY_BYTES,
     )
     assert isinstance(runtime, RuntimeAdapter)
+
+
+@pytest.mark.parametrize(
+    "requested",
+    [
+        pytest.param(None, id="default"),
+        pytest.param(PUMPKIN_MINECRAFT_VERSION, id="pinned-version"),
+    ],
+)
+async def test_pumpkin_runtime_resolve_version_002_nominal_supported_request_is_pinned(
+    requested: str | None,
+) -> None:
+    """Test 002 - Nominal
+    Condition: The caller omits the version or requests the pinned Pumpkin version
+    Result: The pinned Pumpkin Minecraft version is returned
+    """
+    # Arrange
+    runtime: PumpkinRuntime = PumpkinRuntime()
+
+    # Act
+    resolved: str = await runtime.resolve_version(requested)
+
+    # Assert
+    assert resolved == PUMPKIN_MINECRAFT_VERSION
+
+
+async def test_pumpkin_runtime_resolve_version_003_anomalous_other_version_is_rejected() -> None:
+    """Test 003 - Anomalous
+    Condition: The caller requests a Minecraft version other than the pinned one
+    Result: ServerVersionUnsupportedError("pumpkin only supports Minecraft version 26.2")
+    """
+    # Arrange
+    runtime: PumpkinRuntime = PumpkinRuntime()
+
+    # Act / Assert
+    with pytest.raises(
+        ServerVersionUnsupportedError,
+        match=f"pumpkin only supports Minecraft version {PUMPKIN_MINECRAFT_VERSION}",
+    ):
+        await runtime.resolve_version("1.8.8")
+
+
+async def test_pumpkin_runtime_list_versions_004_nominal_pinned_version_is_listed() -> None:
+    """Test 004 - Nominal
+    Condition: The Pumpkin runtime is asked for its supported Minecraft versions
+    Result: A one-element list containing the pinned Pumpkin version is returned
+    """
+    # Arrange
+    runtime: PumpkinRuntime = PumpkinRuntime()
+
+    # Act
+    versions: list[str] = await runtime.list_versions()
+
+    # Assert
+    assert versions == [PUMPKIN_MINECRAFT_VERSION]

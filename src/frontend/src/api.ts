@@ -100,10 +100,21 @@ export interface KubernetesPingResponse {
 
 export type HostPingResponse = DockerPingResponse | KubernetesPingResponse
 
+export type ServerRuntime = 'paper' | 'pumpkin'
+
+export const SERVER_RUNTIMES: readonly { id: ServerRuntime; label: string }[] = [
+  { id: 'paper', label: 'Paper' },
+  { id: 'pumpkin', label: 'Pumpkin' },
+]
+
+export function runtimeLabel(runtime: ServerRuntime): string {
+  return SERVER_RUNTIMES.find((entry) => entry.id === runtime)?.label ?? runtime
+}
+
 export interface ServerRead {
   id: string
   name: string
-  runtime: 'pumpkin'
+  runtime: ServerRuntime
   minecraft_version: string
   cpu_millicores: number
   memory_bytes: number
@@ -115,13 +126,15 @@ export interface ServerRead {
 
 export interface ServerCreate {
   name: string
-  runtime?: 'pumpkin'
+  runtime: ServerRuntime
+  minecraft_version?: string | null
   cpu_millicores?: number
   memory_bytes?: number
 }
 
 export interface ServerUpdate {
   name?: string
+  minecraft_version?: string
   cpu_millicores?: number
   memory_bytes?: number
 }
@@ -188,6 +201,8 @@ export const api = {
   updateServer: (id: string, body: ServerUpdate) =>
     request<ServerRead>(`/servers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteServer: (id: string) => request<void>(`/servers/${id}`, { method: 'DELETE' }),
+  listRuntimeVersions: (runtime: ServerRuntime) =>
+    request<string[]>(`/runtimes/${runtime}/versions`),
   listKeypairs: () => request<KeypairRead[]>('/keypairs'),
   createKeypair: (name: string, privateKey?: string) =>
     request<KeypairRead>('/keypairs', {

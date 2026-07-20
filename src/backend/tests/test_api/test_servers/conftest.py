@@ -32,6 +32,7 @@ def server_factory(client: httpx.AsyncClient) -> ServerFactory:
     async def create_server(**overrides: Any) -> JsonObject:
         payload: JsonObject = {
             "name": "pumpkin-patch",
+            "runtime": "pumpkin",
             "cpu_millicores": PUMPKIN_MINIMUM_CPU_MILLICORES,
             "memory_bytes": PUMPKIN_MINIMUM_MEMORY_BYTES,
             **overrides,
