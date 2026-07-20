@@ -30,7 +30,6 @@ from fourdrinier.servers.paper import (
     PAPER_DATA_PATH,
     PAPER_FILL_PROJECT_URL,
     PAPER_FILL_USER_AGENT,
-    PAPER_IMAGE_RELEASE,
     PAPER_IMAGE_REPOSITORY,
     PAPER_MINIMUM_CPU_MILLICORES,
     PAPER_MINIMUM_MEMORY_BYTES,
@@ -88,7 +87,7 @@ def test_paper_runtime_deployment_spec_001_nominal_logical_server_is_translated(
         memory_bytes=3_221_225_472,
     )
     expected: DeploymentSpec = DeploymentSpec(
-        image_reference=f"{PAPER_IMAGE_REPOSITORY}:{PAPER_IMAGE_RELEASE}-java21",
+        image_reference=f"{PAPER_IMAGE_REPOSITORY}:java21",
         command=(),
         env=(
             EnvironmentVariable(name="TYPE", value="PAPER"),
@@ -140,12 +139,16 @@ def test_paper_runtime_deployment_spec_001_nominal_logical_server_is_translated(
     ("minecraft_version", "java_tag"),
     [
         pytest.param("1.8.8", "java8", id="legacy"),
-        pytest.param("1.16.5", "java8", id="pre-java17"),
-        pytest.param("1.13-pre7", "java8", id="pre-release-suffix"),
+        pytest.param("1.11.2", "java8", id="java8-ceiling"),
         pytest.param("1.RV-Pre1", "java8", id="non-numeric-component"),
+        pytest.param("1.12", "java11", id="java11-floor"),
+        pytest.param("1.13-pre7", "java11", id="pre-release-suffix"),
+        pytest.param("1.16.4", "java11", id="java11-ceiling"),
+        pytest.param("1.16.5", "java16", id="java16"),
         pytest.param("1.17.1", "java17", id="java17-floor"),
-        pytest.param("1.20.4", "java17", id="java17-ceiling"),
-        pytest.param("1.20.5", "java21", id="java21-floor"),
+        pytest.param("1.19.4", "java17", id="java17-ceiling"),
+        pytest.param("1.20", "java21", id="java21-floor"),
+        pytest.param("1.20.4", "java21", id="java21-pre-vanilla-bump"),
         pytest.param("1.21.4", "java21", id="java21"),
         pytest.param("25.2", "java21", id="new-scheme-pre-java25"),
         pytest.param("26.1", "java25", id="java25-floor"),
@@ -158,7 +161,7 @@ def test_paper_runtime_deployment_spec_002_nominal_java_variant_matches_version(
 ) -> None:
     """Test 002 - Nominal
     Condition: Servers span Minecraft versions with differing Java requirements
-    Result: The image reference pins the release with the matching Java variant
+    Result: The image reference uses the matching itzg Java variant tag
     """
     # Arrange
     runtime: PaperRuntime = PaperRuntime()
@@ -174,9 +177,7 @@ def test_paper_runtime_deployment_spec_002_nominal_java_variant_matches_version(
     specification: DeploymentSpec = runtime.deployment_spec(server)
 
     # Assert
-    assert specification.image_reference == (
-        f"{PAPER_IMAGE_REPOSITORY}:{PAPER_IMAGE_RELEASE}-{java_tag}"
-    )
+    assert specification.image_reference == f"{PAPER_IMAGE_REPOSITORY}:{java_tag}"
 
 
 @pytest.mark.parametrize(

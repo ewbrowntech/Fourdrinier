@@ -36,17 +36,19 @@ PAPER_FILL_TIMEOUT_SECONDS: float = 10.0
 PAPER_MINIMUM_CPU_MILLICORES: int = 2_000
 PAPER_MINIMUM_MEMORY_BYTES: int = 2 * 1024 * 1024 * 1024
 PAPER_IMAGE_REPOSITORY: str = "itzg/minecraft-server"
-PAPER_IMAGE_RELEASE: str = "2026.7.1"
 PAPER_DATA_MOUNT_NAME: str = "data"
 PAPER_DATA_PATH: str = "/data"
 PAPER_PORT: int = 25565
 # Reserve headroom below the container limit for JVM overhead beyond the heap.
 PAPER_MEMORY_OVERHEAD_BYTES: int = 512 * 1024 * 1024
-# Minimum Minecraft version requiring each Java image variant, newest first.
+# Paper recommended Java floors (docs.papermc.io/paper/getting-started), newest first.
+# Tags match Hub's Java variants (itzg/minecraft-server:java25, :java21, …).
 PAPER_JAVA_IMAGE_TAGS: tuple[tuple[tuple[int, ...], str], ...] = (
     ((26, 1), "java25"),
-    ((1, 20, 5), "java21"),
+    ((1, 20), "java21"),
     ((1, 17), "java17"),
+    ((1, 16, 5), "java16"),
+    ((1, 12), "java11"),
 )
 PAPER_FALLBACK_JAVA_IMAGE_TAG: str = "java8"
 
@@ -73,13 +75,13 @@ def _version_ordinal(version: str) -> tuple[int, ...]:
 
 
 def _image_reference(minecraft_version: str) -> str:
-    """Select the pinned itzg image variant for a Minecraft version's Java requirement.
+    """Select the itzg Java image variant for Paper's recommended JVM.
 
     Args:
         minecraft_version: Concrete Minecraft version being deployed.
 
     Returns:
-        The fully pinned itzg/minecraft-server image reference.
+        An itzg/minecraft-server image reference tagged by Java variant.
     """
     ordinal: tuple[int, ...] = _version_ordinal(minecraft_version)
     java_tag: str = PAPER_FALLBACK_JAVA_IMAGE_TAG
@@ -87,7 +89,7 @@ def _image_reference(minecraft_version: str) -> str:
         if ordinal >= minimum:
             java_tag = tag
             break
-    return f"{PAPER_IMAGE_REPOSITORY}:{PAPER_IMAGE_RELEASE}-{java_tag}"
+    return f"{PAPER_IMAGE_REPOSITORY}:{java_tag}"
 
 
 def _heap_megabytes(memory_bytes: int) -> int:
@@ -261,7 +263,6 @@ __all__: list[str] = [
     "PAPER_FILL_PROJECT_URL",
     "PAPER_FILL_TIMEOUT_SECONDS",
     "PAPER_FILL_USER_AGENT",
-    "PAPER_IMAGE_RELEASE",
     "PAPER_IMAGE_REPOSITORY",
     "PAPER_JAVA_IMAGE_TAGS",
     "PAPER_MEMORY_OVERHEAD_BYTES",
